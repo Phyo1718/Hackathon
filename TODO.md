@@ -8,11 +8,11 @@
 - [x] **Task 2:** Seed realistic mock data in `src/init_db.py` (e.g., IT Budget: €100,000, Construction Budget: €500,000; Approved IT Suppliers: Apple, Dell; Unapproved: TechCorp) and make sure running the script resets the database cleanly.
 
 ## 🧠 Phase 2: The Agent Logic (`src/agent.py`)
-- [ ] **Task 3:** Write deterministic database tool functions in `src/agent.py`:
+- [x] **Task 3:** Write deterministic database tool functions in `src/agent.py`:
   - `check_budget(request_amount, category)` — returns remaining budget and sufficiency status.
   - `check_supplier(supplier_name)` — verifies whether the supplier exists and is approved.
   - `commit_decision(request_data, decision, reasoning)` — deducts `request_amount` from `Remaining_Budget` (if approved) and writes an entry to `Audit_Logs`.
-- [ ] **Task 4:** Implement `evaluate_request(text)` in `src/agent.py` using **Gemini Structured Outputs** (`google-genai` SDK with a Pydantic schema for `supplier_name`, `amount`, `category`, and `summary`) to extract parameters, run the tool checks, and return a decision (`APPROVED`, `REQUIRES_REVIEW`, or `REJECTED`) with step-by-step reasoning.
+- [x] **Task 4:** Implement `evaluate_request(text)` in `src/agent.py` using **Gemini Structured Outputs** (`google-genai` SDK with a Pydantic schema for `supplier_name`, `amount`, `category`, and `summary`) to extract parameters, run the tool checks, and return a decision (`APPROVED`, `REQUIRES_REVIEW`, or `REJECTED`) with step-by-step reasoning.
 
 ## 🎨 Phase 3: The User Interface (`app.py`)
 - [ ] **Task 5:** Build the Streamlit UI in `app.py` with:
