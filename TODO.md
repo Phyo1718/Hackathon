@@ -1,11 +1,11 @@
 # Hackathon TODO List: Public Procurement Trust Agent
 
 ## 📦 Phase 1: Database & Mock Data (`src/init_db.py`)
-- [ ] **Task 1:** Create `src/init_db.py` to initialize `data/mock_data.db` with three tables:
+- [x] **Task 1:** Create `src/init_db.py` to initialize `data/mock_data.db` with three tables:
   - `Budgets` (`Category`, `Total_Budget`, `Remaining_Budget`)
   - `Suppliers` (`Name`, `Is_Approved`, `Category`)
   - `Audit_Logs` (`Id`, `Timestamp`, `Request_Text`, `Supplier`, `Amount`, `Category`, `Decision`, `Reasoning`)
-- [ ] **Task 2:** Seed realistic mock data in `src/init_db.py` (e.g., IT Budget: €100,000, Construction Budget: €500,000; Approved IT Suppliers: Apple, Dell; Unapproved: TechCorp) and make sure running the script resets the database cleanly.
+- [x] **Task 2:** Seed realistic mock data in `src/init_db.py` (e.g., IT Budget: €100,000, Construction Budget: €500,000; Approved IT Suppliers: Apple, Dell; Unapproved: TechCorp) and make sure running the script resets the database cleanly.
 
 ## 🧠 Phase 2: The Agent Logic (`src/agent.py`)
 - [ ] **Task 3:** Write deterministic database tool functions in `src/agent.py`:
