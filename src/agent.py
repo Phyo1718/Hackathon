@@ -12,6 +12,29 @@ load_dotenv()
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "../data/mock_data.db")
 
+
+class MissingApiKeyError(RuntimeError):
+    """Raised when neither GEMINI_API_KEY nor GOOGLE_API_KEY is configured."""
+
+
+class ExtractionError(RuntimeError):
+    """Raised when Gemini cannot extract a valid procurement request."""
+
+
+def has_api_key() -> bool:
+    return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+
+
+def get_genai_client() -> genai.Client:
+    """Shared Gemini client factory. Fails fast, before any network call, if no key is set."""
+    if not has_api_key():
+        raise MissingApiKeyError(
+            "No Gemini API key configured. Create a .env file with GEMINI_API_KEY=<your key> "
+            "(see .env.example) or set GEMINI_API_KEY / GOOGLE_API_KEY in the environment."
+        )
+    return genai.Client(http_options=types.HttpOptions(timeout=120000))
+
+
 class ExtractedRequest(BaseModel):
     supplier_name: str = Field(description="Name of the supplier or vendor mentioned in the procurement request.")
     amount: float = Field(description="Total monetary amount requested in Euros (€).")
@@ -375,8 +398,12 @@ def evaluate_bids(bids_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 def evaluate_request(text: str) -> Dict[str, Any]:
-    """Extracts parameters, verifies supplier and audit history, checks budget, and returns decision."""
-    client = genai.Client(http_options=types.HttpOptions(timeout=120000))
+    """Extracts parameters, verifies supplier and audit history, checks budget, and returns decision.
+
+    Raises MissingApiKeyError if no API key is set and ExtractionError if Gemini fails.
+    There is deliberately no offline fallback: without Gemini there is no decision.
+    """
+    client = get_genai_client()
     
     prompt = f"""
     Analyze the following public procurement request text and extract the required fields:
@@ -409,32 +436,14 @@ def evaluate_request(text: str) -> Dict[str, Any]:
             continue
             
     if response is None:
-        return {
-            "supplier_name": "Unknown",
-            "amount": 0.0,
-            "category": "IT-Ausstattung",
-            "summary": "Failed to parse procurement request due to model unavailability.",
-            "procurement_type": "LuD",
-            "supplier_check": {"exists": False, "is_approved": False},
-            "budget_check": {"sufficient": False, "remaining_budget": 0.0},
-            "decision": "REJECTED",
-            "reasoning": f"Error during AI parameter extraction across models: {str(last_exception)}"
-        }
-    
+        raise ExtractionError(
+            f"Gemini extraction failed for all models ({', '.join(models_to_try)}): {last_exception}"
+        ) from last_exception
+
     try:
         extracted = ExtractedRequest.model_validate_json(response.text)
     except Exception as e:
-        return {
-            "supplier_name": "Unknown",
-            "amount": 0.0,
-            "category": "IT-Ausstattung",
-            "summary": "Failed to parse JSON response into schema.",
-            "procurement_type": "LuD",
-            "supplier_check": {"exists": False, "is_approved": False},
-            "budget_check": {"sufficient": False, "remaining_budget": 0.0},
-            "decision": "REJECTED",
-            "reasoning": f"Error validating structured output: {str(e)}"
-        }
+        raise ExtractionError(f"Gemini response did not match the expected schema: {e}") from e
     
     # Run deterministic tool checks
     supplier_res = check_supplier(extracted.supplier_name)

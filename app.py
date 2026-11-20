@@ -1,7 +1,6 @@
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
 
 import pandas as pd
 import streamlit as st
@@ -9,13 +8,11 @@ from dotenv import load_dotenv
 from pypdf import PdfReader
 
 from src.agent import (
-    check_budget,
-    check_contract_extension,
-    check_supplier,
     commit_decision,
     evaluate_bids,
     evaluate_request,
     generate_anmeldebogen_pdf,
+    has_api_key,
 )
 from src.init_db import DB_PATH, init_db
 
@@ -86,6 +83,7 @@ TRANSLATIONS = {
         "next_request_btn": "Process Next Request",
         "no_input_warning": "Please enter a procurement request or upload a document.",
         "spinner_eval": "Checking the request against budget data and the supplier register...",
+        "eval_error": "The request could not be evaluated, so no decision was made: {error}",
         "decision_header": "Agent Evaluation and Decision",
         "status_approved": "Status: APPROVED\n\nThe procurement request complies with the municipal budget and supplier regulations.",
         "status_review": "Status: REQUIRES REVIEW\n\nThis request requires manual verification due to a borderline budget overage.",
@@ -168,6 +166,7 @@ TRANSLATIONS = {
         "next_request_btn": "Nächste Anfrage bearbeiten",
         "no_input_warning": "Bitte geben Sie eine Beschaffungsanfrage ein oder laden Sie ein Dokument hoch.",
         "spinner_eval": "Anfrage wird gegen Haushaltsdaten und Lieferantenregister geprüft...",
+        "eval_error": "Die Anfrage konnte nicht geprüft werden, es wurde keine Entscheidung getroffen: {error}",
         "decision_header": "Prüfergebnis und Entscheidung",
         "status_approved": "Status: GENEHMIGT\n\nDer Beschaffungsantrag erfüllt die haushalts- und vergaberechtlichen Vorgaben.",
         "status_review": "Status: PRÜFUNG ERFORDERLICH\n\nDie Anfrage erfordert eine manuelle Prüfung aufgrund einer geringfügigen Budgetüberschreitung.",
@@ -278,71 +277,6 @@ def get_audit_logs_df() -> pd.DataFrame:
     return pd.DataFrame()
 
 
-def build_offline_evaluation(text: str) -> Dict[str, Any]:
-    """Deterministic fallback used only when the generative model is unavailable."""
-    lowered = text.lower()
-
-    if "techcorp" in lowered:
-        supplier, amount, category = "TechCorp", 38000.0, "IT-Ausstattung"
-    elif "stadtwerke" in lowered or "fahrzeug" in lowered:
-        supplier, amount, category = "Stadtwerke Hildesheim", 76000.0, "Fahrzeuge"
-    elif "officedepot" in lowered or "büromaterial" in lowered or "bueromaterial" in lowered:
-        supplier, amount, category = "OfficeDepot Deutschland", 4200.0, "Büromaterial"
-    elif "bechtle" in lowered:
-        supplier, amount, category = "Bechtle GmbH", 7200.0, "IT-Ausstattung"
-    else:
-        supplier, amount, category = "Dell Technologies", 14500.0, "IT-Ausstattung"
-
-    supplier_res = check_supplier(supplier)
-    budget_res = check_budget(amount, category)
-    canonical_supplier = supplier_res["supplier_name"] if supplier_res["exists"] else supplier
-    is_extension = check_contract_extension(canonical_supplier)
-    procurement_type = "Auftragserweiterung" if is_extension else "LuD"
-
-    if not supplier_res["exists"] or not supplier_res["is_approved"]:
-        decision = "REJECTED"
-        supplier_status = "nicht zugelassen oder nicht registriert"
-    else:
-        supplier_status = "zugelassen"
-        if budget_res.get("error"):
-            decision = "REJECTED"
-        elif budget_res["sufficient"]:
-            decision = "APPROVED"
-        elif budget_res["borderline"]:
-            decision = "REQUIRES_REVIEW"
-        else:
-            decision = "REJECTED"
-
-    reasoning = "\n\n".join(
-        [
-            f"1. **Extraktion:** Lieferant: **{canonical_supplier}**, Betrag: **EUR {amount:,.2f}**, Position: **{category}**.",
-            "2. **Verfahrensart:** `Audit_Logs` geprüft. "
-            + (
-                "Freigegebener Vorauftrag vorhanden; Einstufung als **Auftragserweiterung**."
-                if is_extension
-                else "Kein freigegebener Vorauftrag vorhanden; Einstufung als **LuD**."
-            ),
-            f"3. **Lieferantenprüfung:** Lieferant ist {supplier_status}.",
-            f"4. **Budgetprüfung:** Verfügbar: **EUR {budget_res.get('remaining_budget', 0.0):,.2f}**. Beantragt: **EUR {amount:,.2f}**.",
-            f"5. **Entscheidung:** **{decision}** (deterministischer Offline-Fallback).",
-        ]
-    )
-
-    return {
-        "supplier_name": canonical_supplier,
-        "amount": amount,
-        "category": category,
-        "konto": budget_res.get("konto", ""),
-        "summary": text,
-        "procurement_type": procurement_type,
-        "is_extension": is_extension,
-        "supplier_check": supplier_res,
-        "budget_check": budget_res,
-        "decision": decision,
-        "reasoning": reasoning,
-    }
-
-
 # ==============================================================================
 # STREAMLIT UI SETUP (FORMAL MUNICIPAL THEME)
 # ==============================================================================
@@ -351,6 +285,18 @@ st.set_page_config(
     page_title="Stadt Hildesheim - Procurement Agent",
     layout="wide",
 )
+
+# Startup gate: the agent cannot produce any decision without Gemini, so nothing
+# else is rendered until an API key is configured.
+if not has_api_key():
+    st.error(
+        "**Gemini API key missing / Gemini-API-Schlüssel fehlt.**\n\n"
+        "This application requires Google Gemini and has no offline mode. To set it up:\n\n"
+        "1. Copy `.env.example` to `.env` in the project root.\n"
+        "2. Set `GEMINI_API_KEY=<your key>` in `.env` (or export `GEMINI_API_KEY` / `GOOGLE_API_KEY`).\n"
+        "3. Restart the app with `streamlit run app.py`."
+    )
+    st.stop()
 
 st.markdown(
     """
@@ -582,23 +528,24 @@ with tab_single:
         if not current_input:
             st.warning(t("no_input_warning"))
         else:
+            evaluation = None
             with st.spinner(t("spinner_eval")):
                 try:
                     evaluation = evaluate_request(current_input)
-                except Exception:
-                    evaluation = build_offline_evaluation(current_input)
-                else:
-                    if str(evaluation.get("supplier_name", "")).strip().lower() == "unknown":
-                        evaluation = build_offline_evaluation(current_input)
+                except Exception as e:
+                    # No fallback: without a Gemini extraction there is no decision.
+                    reset_decision_state()
+                    st.error(t("eval_error").format(error=e))
 
-            st.session_state["last_evaluation"] = evaluation
-            st.session_state["committed"] = False
-            st.session_state["committed_decision"] = None
-            st.session_state["approved_pdf"] = None
-            st.session_state["approved_pdf_name"] = None
-            st.session_state.pop("pdf_error", None)
-            st.session_state["_reset_form"] = True
-            st.rerun()
+            if evaluation is not None:
+                st.session_state["last_evaluation"] = evaluation
+                st.session_state["committed"] = False
+                st.session_state["committed_decision"] = None
+                st.session_state["approved_pdf"] = None
+                st.session_state["approved_pdf_name"] = None
+                st.session_state.pop("pdf_error", None)
+                st.session_state["_reset_form"] = True
+                st.rerun()
 
     # Decision and reasoning section
     if st.session_state.get("last_evaluation"):
