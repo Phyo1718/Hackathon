@@ -22,8 +22,8 @@
 - [x] **Task 6:** Display the Agent's decision in a color-coded status banner (Green = Approved, Yellow = Requires Human Review, Red = Rejected) alongside the step-by-step **Reasoning** breakdown.
 
 ## 🔗 Phase 4: Integration, Trust & Demo Polish
-- [ ] **Task 7:** Connect `app.py` to `src/agent.py` and add **"Approve & Commit to Budget"** / **"Reject"** human-in-the-loop buttons so caseworkers can confirm borderline or valid requests and update `data/mock_data.db` live.
-- [ ] **Task 8:** Add 3 one-click **Sample Request** buttons in the UI (1 valid request, 1 unapproved supplier, 1 borderline/over-budget request) and an optional **English / German UI** toggle for the jury demo.
+- [x] **Task 7:** Connect `app.py` to `src/agent.py` and add **"Approve & Commit to Budget"** / **"Reject"** human-in-the-loop buttons so caseworkers can confirm borderline or valid requests and update `data/mock_data.db` live.
+- [x] **Task 8:** Add 3 one-click **Sample Request** buttons in the UI (1 valid request, 1 unapproved supplier, 1 borderline/over-budget request) and an optional **English / German UI** toggle for the jury demo.
 
 ## 🎤 Phase 5: Testing & Pitch Prep
 - [ ] **Task 9:** Run end-to-end verification across all 3 sample scenarios + 1 sample PDF upload, confirming live budget updates and audit log entries.
