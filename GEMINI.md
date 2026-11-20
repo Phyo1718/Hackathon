@@ -13,9 +13,9 @@ To reduce the workload of public administration caseworkers by automatically che
 
 ## 🛠️ Tech Stack
 - **Frontend:** Streamlit (Python)
-- **Backend/Database:** Python 3.10+, SQLite (using built-in `sqlite3`)
+- **Backend/Database:** Python 3.12+, SQLite (using built-in `sqlite3`)
 - **AI Framework:** Official Google GenAI SDK (from google import genai, using client = genai.Client()) — do NOT use deprecated google.generativeai or LangChain.
-- **Runtime:** Always execute scripts and tests using .venv/bin/python.
+- **Runtime:** Always execute scripts and tests using the project virtual environment's interpreter: `.venv\Scripts\python` on Windows, `.venv/bin/python` on macOS/Linux.
 
 ## 📜 Permanent Rules & Constraints
 1. **Explainability is Mandatory:** Every decision (Approve, Reject, or Escalate) MUST be accompanied by a clear, step-by-step reasoning block (e.g., "Checked budget: €50k available. Requested: €40k. Status: OK.").
