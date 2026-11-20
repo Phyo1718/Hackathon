@@ -8,6 +8,8 @@ charset-normalizer==3.5.2
 click==8.5.1
 cryptography==50.0.2
 distro==1.9.0
+et_xmlfile==2.0.0
+fonttools==4.68.0
 fpdf2==2.9.0
 google-auth==2.62.2
 google-genai==3.6.1
@@ -22,6 +24,7 @@ jsonschema-specifications==2025.9.1
 MarkupSafe==3.0.4
 narwhals==2.29.0
 numpy==2.5.5
+openpyxl==3.1.5
 packaging==26.3
 pandas==3.1.1
 pillow==13.0.0
