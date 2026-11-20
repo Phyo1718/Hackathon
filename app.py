@@ -92,6 +92,8 @@ TRANSLATIONS = {
         "no_reasoning": "No reasoning provided.",
         "approval_header": "Caseworker Approval",
         "approval_note": "The Anmeldebogen is generated only after approval. Budget commitment and audit logging occur at the same time.",
+        "justification_label": "Justification (required)",
+        "justification_help": "Explain why the borderline budget overage is acceptable (at least 20 characters). It is stored in the audit log and printed on the Anmeldebogen.",
         "commit_approve_btn": "Approve & Commit to Budget",
         "commit_reject_btn": "Reject Request",
         "commit_error": "Commit failed: {error}",
@@ -175,6 +177,8 @@ TRANSLATIONS = {
         "no_reasoning": "Keine Begründung vorhanden.",
         "approval_header": "Freigabe durch die Sachbearbeitung",
         "approval_note": "Der Anmeldebogen wird erst nach der Freigabe erzeugt. Budgetbindung und Audit-Protokollierung erfolgen zeitgleich.",
+        "justification_label": "Begründung (erforderlich)",
+        "justification_help": "Begründen Sie, warum die geringfügige Budgetüberschreitung vertretbar ist (mindestens 20 Zeichen). Die Begründung wird im Audit-Protokoll gespeichert und auf dem Anmeldebogen ausgegeben.",
         "commit_approve_btn": "Genehmigen und Budget belasten",
         "commit_reject_btn": "Anfrage ablehnen",
         "commit_error": "Verbuchung fehlgeschlagen: {error}",
@@ -357,6 +361,7 @@ if st.session_state.pop("_reset_form", False):
     st.session_state["approved_pdf"] = None
     st.session_state["approved_pdf_name"] = None
     st.session_state.pop("pdf_error", None)
+    st.session_state.pop("override_justification", None)
 
 
 def t(key: str) -> str:
@@ -371,6 +376,7 @@ def reset_decision_state() -> None:
     st.session_state["approved_pdf"] = None
     st.session_state["approved_pdf_name"] = None
     st.session_state.pop("pdf_error", None)
+    st.session_state.pop("override_justification", None)
 
 
 def clear_form() -> None:
@@ -576,38 +582,67 @@ with tab_single:
         # branch, after the budget and audit log have been committed.
         if not st.session_state.get("committed", False):
             st.subheader(t("approval_header"))
-            st.caption(t("approval_note"))
-            hc1, hc2 = st.columns(2)
-            with hc1:
-                if st.button(t("commit_approve_btn"), type="primary", use_container_width=True):
+            is_approved = decision in ["APPROVED", "APPROVE"]
+            is_review = decision in ["REQUIRES_REVIEW", "REQUIRES REVIEW", "REVIEW"]
+            # Rejected requests can only be confirmed as rejected; approval is not offered.
+            can_approve = is_approved or is_review
+
+            override_reason = None
+            if is_review:
+                override_reason = st.text_area(
+                    t("justification_label"),
+                    key="override_justification",
+                    help=t("justification_help"),
+                )
+            justification_ok = len("".join((override_reason or "").split())) >= 20
+
+            approve_clicked = False
+            if can_approve:
+                st.caption(t("approval_note"))
+                hc1, hc2 = st.columns(2)
+                with hc1:
+                    approve_clicked = st.button(
+                        t("commit_approve_btn"),
+                        key="approve_btn",
+                        type="primary",
+                        use_container_width=True,
+                        disabled=is_review and not justification_ok,
+                    )
+            else:
+                hc2 = st.container()
+            if approve_clicked:
+                try:
+                    commit_decision(
+                        request_text=eval_data.get("summary", ""),
+                        supplier=eval_data.get("supplier_name", "Unbekannt"),
+                        amount=float(eval_data.get("amount", 0.0)),
+                        category=eval_data.get("category", "IT-Ausstattung"),
+                        decision="APPROVED",
+                        reasoning=str(reasoning),
+                        override_reason=override_reason if is_review else None,
+                    )
+                except Exception as e:
+                    st.error(t("commit_error").format(error=e))
+                else:
+                    st.session_state["committed"] = True
+                    st.session_state["committed_decision"] = "APPROVED"
                     try:
-                        commit_decision(
-                            request_text=eval_data.get("summary", ""),
-                            supplier=eval_data.get("supplier_name", "Unbekannt"),
-                            amount=float(eval_data.get("amount", 0.0)),
-                            category=eval_data.get("category", "IT-Ausstattung"),
-                            decision="APPROVED",
-                            reasoning=str(reasoning),
+                        pdf_bytes = generate_anmeldebogen_pdf(
+                            eval_data,
+                            override_reason=override_reason if is_review else None,
                         )
+                        st.session_state["approved_pdf"] = pdf_bytes
+                        st.session_state["approved_pdf_name"] = (
+                            f"Anmeldebogen_{eval_data.get('procurement_type', 'LuD')}_"
+                            f"{datetime.now().strftime('%Y%m%d')}.pdf"
+                        )
+                        st.session_state.pop("pdf_error", None)
                     except Exception as e:
-                        st.error(t("commit_error").format(error=e))
-                    else:
-                        st.session_state["committed"] = True
-                        st.session_state["committed_decision"] = "APPROVED"
-                        try:
-                            pdf_bytes = generate_anmeldebogen_pdf(eval_data)
-                            st.session_state["approved_pdf"] = pdf_bytes
-                            st.session_state["approved_pdf_name"] = (
-                                f"Anmeldebogen_{eval_data.get('procurement_type', 'LuD')}_"
-                                f"{datetime.now().strftime('%Y%m%d')}.pdf"
-                            )
-                            st.session_state.pop("pdf_error", None)
-                        except Exception as e:
-                            st.session_state["approved_pdf"] = None
-                            st.session_state["pdf_error"] = str(e)
-                        st.rerun()
+                        st.session_state["approved_pdf"] = None
+                        st.session_state["pdf_error"] = str(e)
+                    st.rerun()
             with hc2:
-                if st.button(t("commit_reject_btn"), use_container_width=True):
+                if st.button(t("commit_reject_btn"), key="reject_btn", use_container_width=True):
                     try:
                         commit_decision(
                             request_text=eval_data.get("summary", ""),

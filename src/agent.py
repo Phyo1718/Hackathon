@@ -161,27 +161,68 @@ def check_budget(request_amount: float, category: str) -> Dict[str, Any]:
         "borderline": borderline
     }
 
-def commit_decision(request_text: str, supplier: str, amount: float, category: str, decision: str, reasoning: str) -> None:
-    """Deduct request_amount from Remaining_Budget (if approved) and write an audit log entry."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
+def commit_decision(
+    request_text: str,
+    supplier: str,
+    amount: float,
+    category: str,
+    decision: str,
+    reasoning: str,
+    override_reason: str | None = None,
+) -> None:
+    """Deduct request_amount from Remaining_Budget (if approved) and write an audit log entry.
+
+    Approvals are re-validated here, independently of the UI: the supplier must be
+    registered and approved, and the amount must fit the remaining budget. A borderline
+    overage (within 5%) is only accepted with a non-empty override_reason.
+    """
+    decision = decision.upper()
+    override_reason = (override_reason or "").strip()
+
+    if decision == "APPROVED":
+        supplier_res = check_supplier(supplier)
+        if not supplier_res["exists"]:
+            raise ValueError(f"Cannot approve: supplier '{supplier}' is not registered in the supplier database.")
+        if not supplier_res["is_approved"]:
+            raise ValueError(f"Cannot approve: supplier '{supplier_res['supplier_name']}' is not an approved supplier.")
+
+        budget_res = check_budget(amount, category)
+        if budget_res.get("error"):
+            raise ValueError(f"Cannot approve: budget category '{category}' not found.")
+        if not budget_res["sufficient"]:
+            overage = amount - budget_res["remaining_budget"]
+            if not budget_res["borderline"]:
+                raise ValueError(
+                    f"Cannot approve: amount exceeds the remaining budget by €{overage:,.2f}, beyond the 5% tolerance."
+                )
+            if not override_reason:
+                raise ValueError(
+                    f"Cannot approve: amount exceeds the remaining budget by €{overage:,.2f}; "
+                    "a caseworker justification is required for this borderline overage."
+                )
+
+    if override_reason:
+        reasoning = f"{reasoning}\n\nCaseworker justification: {override_reason}"
+
     timestamp = datetime.now().isoformat(timespec='seconds')
-    
-    if decision.upper() == "APPROVED":
-        cursor.execute("""
-            UPDATE Budgets 
-            SET Remaining_Budget = Remaining_Budget - ? 
-            WHERE LOWER(Category) = LOWER(?);
-        """, (amount, category))
-    
-    cursor.execute("""
-        INSERT INTO Audit_Logs (Timestamp, Request_Text, Supplier, Amount, Category, Decision, Reasoning)
-        VALUES (?, ?, ?, ?, ?, ?, ?);
-    """, (timestamp, request_text, supplier, amount, category, decision.upper(), reasoning))
-    
-    conn.commit()
-    conn.close()
+
+    conn = get_db_connection()
+    try:
+        # Budget deduction and audit entry are written atomically (all or nothing).
+        with conn:
+            if decision == "APPROVED":
+                conn.execute("""
+                    UPDATE Budgets
+                    SET Remaining_Budget = Remaining_Budget - ?
+                    WHERE LOWER(Category) = LOWER(?);
+                """, (amount, category))
+
+            conn.execute("""
+                INSERT INTO Audit_Logs (Timestamp, Request_Text, Supplier, Amount, Category, Decision, Reasoning)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
+            """, (timestamp, request_text, supplier, amount, category, decision, reasoning))
+    finally:
+        conn.close()
 
 def _pdf_safe(value: Any) -> str:
     """Normalises text for the PDF core fonts (Latin-1) so generation never crashes."""
@@ -208,8 +249,30 @@ def _format_eur(amount: float) -> str:
     return "EUR " + formatted.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def generate_anmeldebogen_pdf(eval_data: Dict[str, Any]) -> bytes:
-    """Generates a real, printable Anmeldebogen PDF using fpdf2."""
+def generate_anmeldebogen_pdf(eval_data: Dict[str, Any], override_reason: str | None = None) -> bytes:
+    """Generates a real, printable Anmeldebogen PDF using fpdf2.
+
+    Sections 4, 5 and 7 are built only from the supplier_check and budget_check results
+    in eval_data. No PDF is produced for rejected requests or unverifiable data.
+    """
+    decision = str(eval_data.get("decision", "")).strip().upper()
+    if decision not in ("APPROVED", "REQUIRES_REVIEW"):
+        raise ValueError(f"No Anmeldebogen is generated for decision '{decision or 'unknown'}'.")
+
+    supplier_check = eval_data.get("supplier_check") or {}
+    budget_check = eval_data.get("budget_check") or {}
+    if not supplier_check.get("exists") or not supplier_check.get("is_approved"):
+        raise ValueError("No Anmeldebogen is generated: the supplier check did not confirm an approved supplier.")
+    if "remaining_budget" not in budget_check or budget_check.get("error"):
+        raise ValueError("No Anmeldebogen is generated: no valid budget check result is available.")
+
+    override_reason = (override_reason or "").strip()
+    if not budget_check.get("sufficient"):
+        if not budget_check.get("borderline"):
+            raise ValueError("No Anmeldebogen is generated: the amount exceeds the budget beyond the 5% tolerance.")
+        if not override_reason:
+            raise ValueError("No Anmeldebogen is generated: the budget overage requires a caseworker justification.")
+
     proc_type = eval_data.get("procurement_type", "LuD")
     supplier = eval_data.get("supplier_name", "Unbekannt")
     amount = float(eval_data.get("amount", 0.0) or 0.0)
@@ -276,30 +339,57 @@ def generate_anmeldebogen_pdf(eval_data: Dict[str, Any]) -> bytes:
     section("2. Art der Leistung und Produktbereich", konto_line)
     section("3. Geschätzter Auftragswert (brutto)", _format_eur(amount))
 
+    # Section 4: classification, derived from the Audit_Logs history check.
     if is_extension:
         section(
-            "4. Grundlage der Auftragserweiterung",
-            "Es wird auf einen bereits freigegebenen Auftrag zurückgegriffen. "
-            "Die frühere Freigabe ist im Audit-Protokoll der Stadt Hildesheim dokumentiert.",
-        )
-        section(
-            "5. Begründung der Wirtschaftlichkeit",
-            "Die Konditionen des Ursprungsauftrags werden fortgeführt. Eine erneute "
-            "Markterkundung ist aus wirtschaftlichen Gründen nicht erforderlich.",
+            "4. Verfahrensart: Auftragserweiterung",
+            f"Im Audit-Protokoll wurde ein freigegebener Vorauftrag mit {supplier} gefunden. "
+            "Der Antrag wurde daher als Auftragserweiterung eingestuft.",
         )
     else:
         section(
-            "4. Verfahrensart",
-            "Direktvergabe beziehungsweise beschränkte Ausschreibung nach UVgO. "
-            "Die vergaberechtlichen Voraussetzungen wurden geprüft.",
-        )
-        section(
-            "5. Vergaberechtliche Prüfung",
-            "Der Auftragnehmer ist im zugelassenen Lieferantenverzeichnis registriert. "
-            "Die Haushaltsmittel stehen zur Verfügung.",
+            "4. Verfahrensart: Neue Vergabe (LuD)",
+            f"Im Audit-Protokoll wurde kein freigegebener Vorauftrag mit {supplier} gefunden. "
+            "Der Antrag wurde daher als neue Vergabe (Lieferung und Dienstleistung) eingestuft.",
         )
 
+    # Section 5: results of the supplier and budget checks, exactly as recorded.
+    remaining = float(budget_check["remaining_budget"])
+    budget_konto = budget_check.get("konto") or konto
+    supplier_line = (
+        f"Lieferantenprüfung: {supplier_check.get('supplier_name', supplier)} ist im Lieferantenverzeichnis "
+        f"als zugelassen geführt (Kategorie: {supplier_check.get('category') or 'nicht angegeben'})."
+    )
+    budget_line = (
+        f"Budgetprüfung: Haushaltsposition {budget_check.get('category', category)}"
+        + (f" (Konto {budget_konto})" if budget_konto else "")
+        + f": verfügbar {_format_eur(remaining)}, beantragt {_format_eur(amount)}. "
+    )
+    overage = amount - remaining
+    if budget_check.get("sufficient"):
+        budget_line += "Die verfügbaren Mittel decken den beantragten Betrag."
+    else:
+        budget_line += (
+            f"Der beantragte Betrag überschreitet die verfügbaren Mittel um {_format_eur(overage)} "
+            "(innerhalb der 5%-Toleranz)."
+        )
+    section("5. Ergebnis der automatisierten Prüfung", f"{supplier_line}\n{budget_line}")
+
     section("6. Auftragnehmer / Lieferant", supplier)
+
+    # Section 7: caseworker approval, including any override of a budget overage.
+    approval_text = (
+        f"Agentenempfehlung: {decision}. Freigabe durch die Sachbearbeitung erteilt; "
+        f"{_format_eur(amount)} wurden auf der Haushaltsposition {category} gebucht "
+        f"(verbleibend nach Buchung: {_format_eur(remaining - amount)})."
+    )
+    if not budget_check.get("sufficient"):
+        approval_text += (
+            f"\nFreigabe trotz Budgetüberschreitung um {_format_eur(overage)}."
+            f"\nBegründung der Sachbearbeitung: {override_reason}"
+        )
+    elif override_reason:
+        approval_text += f"\nBegründung der Sachbearbeitung: {override_reason}"
 
     pdf.ln(6)
     pdf.set_font("Helvetica", "B", 10)
@@ -309,14 +399,7 @@ def generate_anmeldebogen_pdf(eval_data: Dict[str, Any]) -> bytes:
         new_x="LMARGIN", new_y="NEXT",
     )
     pdf.set_font("Helvetica", "", 9)
-    pdf.multi_cell(
-        0, 6,
-        _pdf_safe(
-            "Status: Freigegeben und im Haushalt verbucht. "
-            "Der Vorgang wurde im Audit-Protokoll der Stadt Hildesheim erfasst."
-        ),
-        new_x="LMARGIN", new_y="NEXT",
-    )
+    pdf.multi_cell(0, 6, _pdf_safe(approval_text), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(12)
     pdf.cell(0, 6, _pdf_safe("Ort, Datum: Hildesheim, " + datetime.now().strftime('%d.%m.%Y')), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(10)
