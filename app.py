@@ -1,103 +1,226 @@
-import os
 import sqlite3
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 from pypdf import PdfReader
 
-from src.agent import commit_decision, evaluate_request
+from src.agent import (
+    check_budget,
+    check_contract_extension,
+    check_supplier,
+    commit_decision,
+    evaluate_bids,
+    evaluate_request,
+    generate_anmeldebogen_pdf,
+)
 from src.init_db import DB_PATH, init_db
 
 # Load environment variables
 load_dotenv()
 
-# Ensure database exists on startup
-if not Path(DB_PATH).exists():
+
+def database_needs_init() -> bool:
+    """Initialise the database only when it is missing or uses an outdated schema."""
+    if not Path(DB_PATH).exists():
+        return True
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(Budgets);")}
+        return "Konto" not in columns
+    except Exception:
+        return True
+
+
+if database_needs_init():
     try:
         init_db()
     except Exception:
         pass
 
+
 # ==============================================================================
-# BILINGUAL LOCALIZATION (EN / DE)
+# BILINGUAL LOCALIZATION (EN / DE) - FORMAL MUNICIPAL ADMINISTRATION THEME
 # ==============================================================================
 
 TRANSLATIONS = {
     "EN": {
-        "title": "🏛️ Public Procurement Trust Agent",
-        "subtitle": "Automated procurement validation assistant for public administration caseworkers. Every decision is verified against municipal budgets and approved supplier records with **full explainability**.",
-        "sidebar_header": "🏛️ Administration Live State",
-        "sidebar_caption": "Synchronized with `data/mock_data.db`",
-        "reset_btn": "🔄 Reset Demo Data",
-        "budgets_header": "💰 Budgets",
-        "audit_header": "📋 Audit Logs",
-        "input_header": "📄 Procurement Request Input",
-        "pdf_label": "Upload Procurement Document (PDF)",
-        "textarea_label": "Procurement Request Details",
-        "textarea_placeholder": "Paste or type procurement request (e.g. 'Order 15 Dell laptops for €22,500 for the IT Department')...",
-        "evaluate_btn": "🚀 Evaluate Request",
-        "clear_btn": "🗑️ Clear",
-        "next_request_btn": "🔄 Process Next Request",
-        "sample_header": "⚡ One-Click Demo Samples",
-        "sample_1": "1️⃣ Valid IT Request (Dell)",
-        "sample_2": "2️⃣ Unapproved Supplier (TechCorp)",
-        "sample_3": "3️⃣ Over-Budget / Review (BuildCorp)",
-        "decision_header": "🎯 Agent Evaluation & Decision",
-        "status_approved": "### ✅ Status: APPROVED\n\n**The procurement request passes all compliance and budget checks.**",
-        "status_review": "### ⚠️ Status: REQUIRES REVIEW\n\n**This request requires manual verification or caseworker override.**",
-        "status_rejected": "### ❌ Status: REJECTED\n\n**The procurement request violates municipal procurement policies.**",
-        "reasoning_header": "🔍 Step-by-Step Reasoning Breakdown",
-        "commit_approve_btn": "✅ Approve & Commit to Budget",
-        "commit_reject_btn": "❌ Reject Request",
-        "committed_success": "✅ Successfully committed decision to database, deducted budget, and recorded audit log!",
-        "committed_reject": "⚠️ Recorded rejection in audit log. No budget changes made.",
-        "already_committed": "🔒 Decision has already been committed to the database and audit log.",
+        "agency": "Stadt Hildesheim | Central Procurement Office",
+        "title": "Public Procurement Assistant",
+        "subtitle": "Verification portal for municipal procurement requests, budget commitments and audit documentation.",
+        "sidebar_header": "Administration Status",
+        "sidebar_caption": "Live data from data/mock_data.db",
+        "reset_btn": "Reset Demo Data",
+        "reset_success": "Database reset to the initial demo state.",
+        "reset_error": "Database reset failed: {error}",
+        "budgets_header": "Municipal Budgets",
+        "col_category": "Position",
+        "col_konto": "Account",
+        "col_total": "Total",
+        "col_available": "Available",
+        "no_budget_data": "No budget data available.",
+        "audit_header": "Audit Logs",
+        "col_id": "ID",
+        "col_timestamp": "Timestamp",
+        "col_supplier": "Supplier",
+        "col_amount": "Amount",
+        "col_decision": "Decision",
+        "no_audit_data": "No audit entries available.",
+        "input_header": "Procurement Request Intake",
+        "pdf_label": "Upload procurement document (PDF)",
+        "pdf_help": "Upload a quotation or invoice as PDF. The extracted text is placed in the request field.",
+        "pdf_extracted": "{count} characters extracted from the PDF.",
+        "pdf_extract_warning": "No extractable text was found in the PDF.",
+        "pdf_extract_error": "The PDF could not be read: {error}",
+        "sample_header": "Preset Requests",
+        "sample_1": "Valid IT request (Dell)",
+        "sample_2": "Blocked supplier (TechCorp)",
+        "sample_3": "Borderline budget (Stadtwerke)",
+        "textarea_label": "Procurement request details",
+        "textarea_placeholder": "Enter the procurement request, including supplier, amount and budget category.",
+        "evaluate_btn": "Evaluate Request",
+        "clear_btn": "Clear Form",
+        "next_request_btn": "Process Next Request",
+        "no_input_warning": "Please enter a procurement request or upload a document.",
+        "spinner_eval": "Checking the request against budget data and the supplier register...",
+        "decision_header": "Agent Evaluation and Decision",
+        "status_approved": "Status: APPROVED\n\nThe procurement request complies with the municipal budget and supplier regulations.",
+        "status_review": "Status: REQUIRES REVIEW\n\nThis request requires manual verification due to a borderline budget overage.",
+        "status_rejected": "Status: REJECTED\n\nThe procurement request violates municipal procurement rules.",
+        "reasoning_header": "Step-by-Step Verification",
+        "no_reasoning": "No reasoning provided.",
+        "approval_header": "Caseworker Approval",
+        "approval_note": "The Anmeldebogen is generated only after approval. Budget commitment and audit logging occur at the same time.",
+        "commit_approve_btn": "Approve & Commit to Budget",
+        "commit_reject_btn": "Reject Request",
+        "commit_error": "Commit failed: {error}",
+        "committed_success": "Status: APPROVED. The budget has been committed, the audit log has been written and the Anmeldebogen is ready for download.",
+        "committed_reject": "Status: REJECTED. The decision has been recorded in the audit log. No budget was committed.",
+        "form_header": "Official Procurement Form",
+        "form_note": "The PDF was generated from the approved request and can be downloaded directly.",
+        "download_form_btn": "Download Anmeldebogen (PDF)",
+        "pdf_error": "The PDF could not be generated:",
+        "tab_single": "Single Request Verification",
+        "tab_matrix": "Bid Evaluation Matrix (§ 13 UVgO)",
+        "matrix_header": "Multi-Bid Evaluation and 30/30/20 Scoring Matrix",
+        "matrix_desc": "Upload multiple quotation PDFs or configure bids to calculate the scoring and generate the mandatory legal rejection letters under § 13 UVgO.",
+        "matrix_pdfs_label": "Upload quotation PDFs (optional)",
+        "matrix_pdfs_help": "Upload one or more quotation documents.",
+        "bidder_config_header": "Bidder configuration for scoring",
+        "bidder_1": "Bidder 1",
+        "bidder_2": "Bidder 2",
+        "bidder_3": "Bidder 3",
+        "name_label": "Name",
+        "price_label": "Price (EUR)",
+        "references_label": "References (0-10)",
+        "concept_label": "Concept (0-10)",
+        "eval_bids_btn": "Run 30/30/20 Bid Evaluation",
+        "spinner_bids": "Calculating the 30/30/20 matrix and preparing rejection letters under § 13 UVgO...",
+        "matrix_winner_header": "Recommended award:",
+        "matrix_winner_success": "Most economical bid with **{points}** total points (bid price: {price}).",
+        "matrix_ranking_header": "Bidder ranking (scoring matrix)",
+        "matrix_rejections_header": "Legal rejection reasons (§ 13 UVgO)",
+        "matrix_rejections_desc": "Mandatory reasons to avoid procurement review proceedings.",
+        "matrix_rejections_expander": "Rejection reasons for unsuccessful bidders under § 13 UVgO",
+        "matrix_rejection_title": "Rejection to {bidder} ({price} | {points} points)",
+        "matrix_no_reason": "No reason available.",
     },
     "DE": {
-        "title": "🏛️ Öffentlicher Beschaffungs-Vertrauensagent",
-        "subtitle": "Automatisierter Beschaffungsprüfungsassistent für die öffentliche Verwaltung. Jede Entscheidung wird gegen städtische Budgets und genehmigte Lieferantenlisten mit **vollständiger Erklärbarkeit** geprüft.",
-        "sidebar_header": "🏛️ Verwaltungs-Live-Status",
-        "sidebar_caption": "Synchronisiert mit `data/mock_data.db`",
-        "reset_btn": "🔄 Demo-Daten zurücksetzen",
-        "budgets_header": "💰 Budgets",
-        "audit_header": "📋 Audit-Protokolle",
-        "input_header": "📄 Beschaffungsanfrage Eingabe",
+        "agency": "Stadt Hildesheim | Zentrale Vergabestelle",
+        "title": "Öffentlicher Vergabeassistent",
+        "subtitle": "Prüfungsportal für Beschaffungsanträge, Haushaltsbindungen und Auditdokumentation der Stadtverwaltung.",
+        "sidebar_header": "Verwaltungsstatus",
+        "sidebar_caption": "Live-Daten aus data/mock_data.db",
+        "reset_btn": "Demo-Daten zurücksetzen",
+        "reset_success": "Datenbank auf den initialen Demo-Stand zurückgesetzt.",
+        "reset_error": "Zurücksetzen der Datenbank fehlgeschlagen: {error}",
+        "budgets_header": "Haushaltsbudgets",
+        "col_category": "Position",
+        "col_konto": "Konto",
+        "col_total": "Gesamt",
+        "col_available": "Verfügbar",
+        "no_budget_data": "Keine Budgetdaten verfügbar.",
+        "audit_header": "Audit-Protokolle",
+        "col_id": "ID",
+        "col_timestamp": "Zeitstempel",
+        "col_supplier": "Lieferant",
+        "col_amount": "Betrag",
+        "col_decision": "Entscheidung",
+        "no_audit_data": "Keine Audit-Einträge vorhanden.",
+        "input_header": "Eingang der Beschaffungsanfrage",
         "pdf_label": "Beschaffungsdokument hochladen (PDF)",
+        "pdf_help": "Laden Sie ein Angebot oder eine Rechnung als PDF hoch. Der extrahierte Text wird in das Antragsfeld übernommen.",
+        "pdf_extracted": "{count} Zeichen aus der PDF extrahiert.",
+        "pdf_extract_warning": "In der PDF wurde kein extrahierbarer Text gefunden.",
+        "pdf_extract_error": "Die PDF konnte nicht gelesen werden: {error}",
+        "sample_header": "Vorkonfigurierte Anfragen",
+        "sample_1": "Gültige IT-Anfrage (Dell)",
+        "sample_2": "Gesperrter Lieferant (TechCorp)",
+        "sample_3": "Grenzwertiges Budget (Stadtwerke)",
         "textarea_label": "Details der Beschaffungsanfrage",
-        "textarea_placeholder": "Beschaffungsanfrage einfügen oder eingeben (z. B. 'Bestellung von 15 Dell Laptops für 22.500 € für die IT-Abteilung')...",
-        "evaluate_btn": "🚀 Anfrage bewerten",
-        "clear_btn": "🗑️ Löschen",
-        "next_request_btn": "🔄 Nächste Anfrage bearbeiten",
-        "sample_header": "⚡ 1-Klick Demo-Beispiele",
-        "sample_1": "1️⃣ Gültige IT-Anfrage (Dell)",
-        "sample_2": "2️⃣ Nicht genehmigter Lieferant (TechCorp)",
-        "sample_3": "3️⃣ Budgetüberschreitung / Prüfung (BuildCorp)",
-        "decision_header": "🎯 Agentenbewertung & Entscheidung",
-        "status_approved": "### ✅ Status: GENEHMIGT\n\n**Die Beschaffungsanfrage erfüllt alle Compliance- und Budgetkriterien.**",
-        "status_review": "### ⚠️ Status: PRÜFUNG ERFORDERLICH\n\n**Diese Anfrage erfordert eine manuelle Überprüfung oder Freigabe.**",
-        "status_rejected": "### ❌ Status: ABGELEHNT\n\n**Die Beschaffungsanfrage verstößt gegen Beschaffungsrichtlinien.**",
-        "reasoning_header": "🔍 Schritt-für-Schritt Begründung",
-        "commit_approve_btn": "✅ Genehmigen & Budget belasten",
-        "commit_reject_btn": "❌ Anfrage ablehnen",
-        "committed_success": "✅ Entscheidung erfolgreich in Datenbank übernommen, Budget belastet und Audit-Protokoll erstellt!",
-        "committed_reject": "⚠️ Ablehnung im Audit-Protokoll gespeichert. Keine Budgetänderung vorgenommen.",
-        "already_committed": "🔒 Die Entscheidung wurde bereits in der Datenbank und im Audit-Protokoll gespeichert.",
+        "textarea_placeholder": "Beschaffungsanfrage mit Lieferant, Betrag und Haushaltsposition eingeben.",
+        "evaluate_btn": "Anfrage prüfen",
+        "clear_btn": "Formular zurücksetzen",
+        "next_request_btn": "Nächste Anfrage bearbeiten",
+        "no_input_warning": "Bitte geben Sie eine Beschaffungsanfrage ein oder laden Sie ein Dokument hoch.",
+        "spinner_eval": "Anfrage wird gegen Haushaltsdaten und Lieferantenregister geprüft...",
+        "decision_header": "Prüfergebnis und Entscheidung",
+        "status_approved": "Status: GENEHMIGT\n\nDer Beschaffungsantrag erfüllt die haushalts- und vergaberechtlichen Vorgaben.",
+        "status_review": "Status: PRÜFUNG ERFORDERLICH\n\nDie Anfrage erfordert eine manuelle Prüfung aufgrund einer geringfügigen Budgetüberschreitung.",
+        "status_rejected": "Status: ABGELEHNT\n\nDer Beschaffungsantrag verstößt gegen die kommunalen Vergabevorschriften.",
+        "reasoning_header": "Schritt-für-Schritt-Prüfprotokoll",
+        "no_reasoning": "Keine Begründung vorhanden.",
+        "approval_header": "Freigabe durch die Sachbearbeitung",
+        "approval_note": "Der Anmeldebogen wird erst nach der Freigabe erzeugt. Budgetbindung und Audit-Protokollierung erfolgen zeitgleich.",
+        "commit_approve_btn": "Genehmigen und Budget belasten",
+        "commit_reject_btn": "Anfrage ablehnen",
+        "commit_error": "Verbuchung fehlgeschlagen: {error}",
+        "committed_success": "Status: GENEHMIGT. Das Budget wurde belastet, der Audit-Eintrag geschrieben und der Anmeldebogen steht zum Download bereit.",
+        "committed_reject": "Status: ABGELEHNT. Die Entscheidung wurde im Audit-Protokoll gespeichert. Es wurde kein Budget belastet.",
+        "form_header": "Amtliches Beschaffungsformular",
+        "form_note": "Die PDF-Datei wurde aus der freigegebenen Anfrage erzeugt und kann direkt heruntergeladen werden.",
+        "download_form_btn": "Anmeldebogen (PDF) herunterladen",
+        "pdf_error": "Die PDF konnte nicht erzeugt werden:",
+        "tab_single": "Einzelantrag-Prüfung",
+        "tab_matrix": "Angebotswertung (§ 13 UVgO)",
+        "matrix_header": "Multi-Bieter-Auswertung und 30/30/20-Scoring-Matrix",
+        "matrix_desc": "Laden Sie mehrere Angebots-PDFs hoch oder konfigurieren Sie Bieter, um die Wertung zu berechnen und rechtssichere Absageschreiben nach § 13 UVgO zu erstellen.",
+        "matrix_pdfs_label": "Angebots-PDFs hochladen (optional)",
+        "matrix_pdfs_help": "Laden Sie ein oder mehrere Angebotsdokumente hoch.",
+        "bidder_config_header": "Bieterkonfiguration für die Wertung",
+        "bidder_1": "Bieter 1",
+        "bidder_2": "Bieter 2",
+        "bidder_3": "Bieter 3",
+        "name_label": "Name",
+        "price_label": "Preis (EUR)",
+        "references_label": "Referenzen (0-10)",
+        "concept_label": "Konzept (0-10)",
+        "eval_bids_btn": "30/30/20-Angebotswertung starten",
+        "spinner_bids": "30/30/20-Matrix wird berechnet und Absageschreiben nach § 13 UVgO werden erstellt...",
+        "matrix_winner_header": "Empfohlener Zuschlagsträger:",
+        "matrix_winner_success": "Wirtschaftlichstes Angebot mit **{points}** Gesamtpunkten (Angebotspreis: {price}).",
+        "matrix_ranking_header": "Rangliste der Bieter (Scoring-Matrix)",
+        "matrix_rejections_header": "Rechtssichere Ablehnungsbegründungen (§ 13 UVgO)",
+        "matrix_rejections_desc": "Zwingend erforderliche Begründungen zur Vermeidung von Vergabeverfahrensklagen.",
+        "matrix_rejections_expander": "Begründungen für abgelehnte Bieter nach § 13 UVgO",
+        "matrix_rejection_title": "Absage an {bidder} ({price} | {points} Punkte)",
+        "matrix_no_reason": "Keine Begründung vorhanden.",
     },
 }
 
 SAMPLE_REQUESTS = {
     "EN": {
-        "valid": "Procurement of 15 Dell laptops for the digital administration team amounting to €22,500 under IT department.",
-        "unapproved": "Server infrastructure and cloud gateway setup provided by TechCorp amounting to €48,000 for IT department.",
-        "review": "Civic center building facade insulation and window renovation by BuildCorp amounting to €520,000 under Construction department.",
+        "valid": "Procurement of 10 Dell laptops for the digital administration team amounting to EUR 14,500 under the IT-Ausstattung budget.",
+        "unapproved": "Server infrastructure setup provided by TechCorp amounting to EUR 38,000 under the IT-Ausstattung budget.",
+        "review": "Procurement of a service vehicle for the municipal works department from Stadtwerke Hildesheim amounting to EUR 76,000 under the Fahrzeuge budget.",
     },
     "DE": {
-        "valid": "Beschaffung von 15 Dell Laptops für das digitale Verwaltungsteam im Wert von 22.500 € für die IT-Abteilung.",
-        "unapproved": "Serverinfrastruktur und Cloud-Gateway-Einrichtung durch TechCorp im Wert von 48.000 € für die IT-Abteilung.",
-        "review": "Fassadendämmung und Fenstersanierung des Bürgerzentrums durch BuildCorp im Wert von 520.000 € für den Bereich Construction.",
+        "valid": "Beschaffung von 10 Dell Laptops für das digitale Verwaltungsteam im Wert von 14.500 Euro für den Bereich IT-Ausstattung.",
+        "unapproved": "Einrichtung einer Serverinfrastruktur durch die Firma TechCorp im Wert von 38.000 Euro für den Bereich IT-Ausstattung.",
+        "review": "Beschaffung eines Dienstleistungsfahrzeugs für den Bauhof bei den Stadtwerken Hildesheim im Wert von 76.000 Euro für den Bereich Fahrzeuge.",
     },
 }
 
@@ -108,7 +231,7 @@ SAMPLE_REQUESTS = {
 
 
 def get_budgets_df() -> pd.DataFrame:
-    """Reads Budgets from data/mock_data.db."""
+    """Reads the municipal budget positions from data/mock_data.db."""
     if not Path(DB_PATH).exists():
         try:
             init_db()
@@ -117,7 +240,8 @@ def get_budgets_df() -> pd.DataFrame:
     try:
         with sqlite3.connect(DB_PATH) as conn:
             df = pd.read_sql_query(
-                "SELECT Category, Total_Budget, Remaining_Budget FROM Budgets", conn
+                "SELECT Category, Konto, Total_Budget, Remaining_Budget FROM Budgets ORDER BY Category",
+                conn,
             )
             if not df.empty:
                 return df
@@ -125,15 +249,15 @@ def get_budgets_df() -> pd.DataFrame:
         pass
     return pd.DataFrame(
         [
-            {"Category": "IT", "Total_Budget": 100000.0, "Remaining_Budget": 100000.0},
-            {"Category": "Construction", "Total_Budget": 500000.0, "Remaining_Budget": 500000.0},
-            {"Category": "Office Supplies", "Total_Budget": 25000.0, "Remaining_Budget": 25000.0},
+            {"Category": "IT-Ausstattung", "Konto": "542900", "Total_Budget": 150000.0, "Remaining_Budget": 124300.0},
+            {"Category": "Büromaterial", "Konto": "543100", "Total_Budget": 25000.0, "Remaining_Budget": 21550.0},
+            {"Category": "Fahrzeuge", "Konto": "544000", "Total_Budget": 80000.0, "Remaining_Budget": 73600.0},
         ]
     )
 
 
 def get_audit_logs_df() -> pd.DataFrame:
-    """Reads Audit_Logs from data/mock_data.db."""
+    """Reads the latest audit entries from data/mock_data.db."""
     if not Path(DB_PATH).exists():
         try:
             init_db()
@@ -142,7 +266,7 @@ def get_audit_logs_df() -> pd.DataFrame:
     try:
         with sqlite3.connect(DB_PATH) as conn:
             df = pd.read_sql_query(
-                "SELECT Id, Timestamp, Request_Text, Supplier, Amount, Category, Decision, Reasoning FROM Audit_Logs ORDER BY Id DESC",
+                "SELECT Id, Timestamp, Supplier, Category, Amount, Decision FROM Audit_Logs ORDER BY Id DESC LIMIT 20",
                 conn,
             )
             if not df.empty:
@@ -152,60 +276,182 @@ def get_audit_logs_df() -> pd.DataFrame:
     return pd.DataFrame()
 
 
+def build_offline_evaluation(text: str) -> Dict[str, Any]:
+    """Deterministic fallback used only when the generative model is unavailable."""
+    lowered = text.lower()
+
+    if "techcorp" in lowered:
+        supplier, amount, category = "TechCorp", 38000.0, "IT-Ausstattung"
+    elif "stadtwerke" in lowered or "fahrzeug" in lowered:
+        supplier, amount, category = "Stadtwerke Hildesheim", 76000.0, "Fahrzeuge"
+    elif "officedepot" in lowered or "büromaterial" in lowered or "bueromaterial" in lowered:
+        supplier, amount, category = "OfficeDepot Deutschland", 4200.0, "Büromaterial"
+    elif "bechtle" in lowered:
+        supplier, amount, category = "Bechtle GmbH", 7200.0, "IT-Ausstattung"
+    else:
+        supplier, amount, category = "Dell Technologies", 14500.0, "IT-Ausstattung"
+
+    supplier_res = check_supplier(supplier)
+    budget_res = check_budget(amount, category)
+    canonical_supplier = supplier_res["supplier_name"] if supplier_res["exists"] else supplier
+    is_extension = check_contract_extension(canonical_supplier)
+    procurement_type = "Auftragserweiterung" if is_extension else "LuD"
+
+    if not supplier_res["exists"] or not supplier_res["is_approved"]:
+        decision = "REJECTED"
+        supplier_status = "nicht zugelassen oder nicht registriert"
+    else:
+        supplier_status = "zugelassen"
+        if budget_res.get("error"):
+            decision = "REJECTED"
+        elif budget_res["sufficient"]:
+            decision = "APPROVED"
+        elif budget_res["borderline"]:
+            decision = "REQUIRES_REVIEW"
+        else:
+            decision = "REJECTED"
+
+    reasoning = "\n\n".join(
+        [
+            f"1. **Extraktion:** Lieferant: **{canonical_supplier}**, Betrag: **EUR {amount:,.2f}**, Position: **{category}**.",
+            "2. **Verfahrensart:** `Audit_Logs` geprüft. "
+            + (
+                "Freigegebener Vorauftrag vorhanden; Einstufung als **Auftragserweiterung**."
+                if is_extension
+                else "Kein freigegebener Vorauftrag vorhanden; Einstufung als **LuD**."
+            ),
+            f"3. **Lieferantenprüfung:** Lieferant ist {supplier_status}.",
+            f"4. **Budgetprüfung:** Verfügbar: **EUR {budget_res.get('remaining_budget', 0.0):,.2f}**. Beantragt: **EUR {amount:,.2f}**.",
+            f"5. **Entscheidung:** **{decision}** (deterministischer Offline-Fallback).",
+        ]
+    )
+
+    return {
+        "supplier_name": canonical_supplier,
+        "amount": amount,
+        "category": category,
+        "konto": budget_res.get("konto", ""),
+        "summary": text,
+        "procurement_type": procurement_type,
+        "is_extension": is_extension,
+        "supplier_check": supplier_res,
+        "budget_check": budget_res,
+        "decision": decision,
+        "reasoning": reasoning,
+    }
+
+
 # ==============================================================================
-# STREAMLIT UI SETUP (Phase 3 & 4)
+# STREAMLIT UI SETUP (FORMAL MUNICIPAL THEME)
 # ==============================================================================
 
 st.set_page_config(
-    page_title="Public Procurement Trust Agent",
-    page_icon="🏛️",
+    page_title="Stadt Hildesheim - Procurement Agent",
     layout="wide",
 )
 
-# Initialize Session State & Dynamic Uploader Key
-if "uploader_key" not in st.session_state:
-    st.session_state["uploader_key"] = 0
-if "request_text_area" not in st.session_state:
-    st.session_state["request_text_area"] = ""
+st.markdown(
+    """
+    <style>
+        .gov-meta {
+            color: #9fb3c8;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.25rem;
+        }
+        div[data-testid="stSidebar"] {
+            border-right: 1px solid #24384c;
+        }
+        div.stButton > button {
+            border-radius: 3px;
+            font-weight: 600;
+        }
+        div[data-testid="stTabs"] button {
+            font-weight: 600;
+        }
+        h1, h2, h3 {
+            letter-spacing: 0.01em;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# Initialize session state
+if "lang" not in st.session_state:
+    st.session_state["lang"] = "DE"
+if "form_key" not in st.session_state:
+    st.session_state["form_key"] = 0
+if "draft_text" not in st.session_state:
+    st.session_state["draft_text"] = ""
 if "last_uploaded_pdf" not in st.session_state:
     st.session_state["last_uploaded_pdf"] = None
 if "last_evaluation" not in st.session_state:
     st.session_state["last_evaluation"] = None
 if "committed" not in st.session_state:
     st.session_state["committed"] = False
+if "committed_decision" not in st.session_state:
+    st.session_state["committed_decision"] = None
+if "approved_pdf" not in st.session_state:
+    st.session_state["approved_pdf"] = None
+if "approved_pdf_name" not in st.session_state:
+    st.session_state["approved_pdf_name"] = None
 
-def clear_form():
-    """Callback to reset all input and evaluation state and cycle uploader key."""
-    st.session_state["request_text_area"] = ""
+# The pending reset is applied before any widget is instantiated. This makes it
+# safe to clear the text area and the file uploader after an evaluation.
+if st.session_state.pop("_reset_form", False):
+    st.session_state["draft_text"] = ""
     st.session_state["last_uploaded_pdf"] = None
+    st.session_state["form_key"] += 1
+    st.session_state["committed"] = False
+    st.session_state["committed_decision"] = None
+    st.session_state["approved_pdf"] = None
+    st.session_state["approved_pdf_name"] = None
+    st.session_state.pop("pdf_error", None)
+
+
+def t(key: str) -> str:
+    lang = st.session_state.get("lang", "DE")
+    return TRANSLATIONS.get(lang, TRANSLATIONS["DE"]).get(key, key)
+
+
+def reset_decision_state() -> None:
     st.session_state["last_evaluation"] = None
     st.session_state["committed"] = False
-    st.session_state["uploader_key"] += 1
+    st.session_state["committed_decision"] = None
+    st.session_state["approved_pdf"] = None
+    st.session_state["approved_pdf_name"] = None
+    st.session_state.pop("pdf_error", None)
 
-# Sidebar: Language Toggle, Reset Demo Data, and Live Tables (Task 5 & 8)
+
+def clear_form() -> None:
+    """Callback that clears the current request and forces fresh widgets."""
+    reset_decision_state()
+    st.session_state["_reset_form"] = True
+
+
+# Sidebar: language selection, reset action and live administration data
 with st.sidebar:
     lang_choice = st.radio(
-        "🌐 Language / Sprache",
-        ["English (EN)", "Deutsch (DE)"],
+        "Sprache / Language",
+        ["Deutsch (DE)", "English (EN)"],
+        index=0 if st.session_state.get("lang", "DE") == "DE" else 1,
         horizontal=True,
     )
-    lang_code = "DE" if "DE" in lang_choice else "EN"
-
-    def t(key: str) -> str:
-        return TRANSLATIONS.get(lang_code, TRANSLATIONS["EN"]).get(key, key)
+    st.session_state["lang"] = "DE" if lang_choice.startswith("Deutsch") else "EN"
 
     st.header(t("sidebar_header"))
     st.caption(t("sidebar_caption"))
 
-    if st.button(t("reset_btn"), use_container_width=True, help="Reset database tables to initial seed state"):
+    if st.button(t("reset_btn"), use_container_width=True):
         try:
             init_db()
-            st.toast("✅ Demo database successfully reset to initial seed state!", icon="🔄")
+            clear_form()
+            st.toast(t("reset_success"))
+            st.rerun()
         except Exception as e:
-            st.error(f"Error resetting database: {e}")
-        st.session_state["last_evaluation"] = None
-        st.session_state["committed"] = False
-        st.rerun()
+            st.error(t("reset_error").format(error=e))
 
     st.divider()
     st.subheader(t("budgets_header"))
@@ -215,13 +461,15 @@ with st.sidebar:
             budgets_df,
             hide_index=True,
             column_config={
-                "Total_Budget": st.column_config.NumberColumn("Total", format="€%d"),
-                "Remaining_Budget": st.column_config.NumberColumn("Remaining", format="€%d"),
+                "Category": st.column_config.TextColumn(t("col_category")),
+                "Konto": st.column_config.TextColumn(t("col_konto")),
+                "Total_Budget": st.column_config.NumberColumn(t("col_total"), format="€%d"),
+                "Remaining_Budget": st.column_config.NumberColumn(t("col_available"), format="€%d"),
             },
             width="stretch",
         )
     else:
-        st.info("No budget data available.")
+        st.info(t("no_budget_data"))
 
     st.divider()
     st.subheader(t("audit_header"))
@@ -231,187 +479,304 @@ with st.sidebar:
             audit_logs_df,
             hide_index=True,
             column_config={
-                "Amount": st.column_config.NumberColumn("Amount", format="€%d"),
+                "Id": st.column_config.NumberColumn(t("col_id"), format="%d"),
+                "Timestamp": st.column_config.TextColumn(t("col_timestamp")),
+                "Supplier": st.column_config.TextColumn(t("col_supplier")),
+                "Category": st.column_config.TextColumn(t("col_category")),
+                "Amount": st.column_config.NumberColumn(t("col_amount"), format="€%d"),
+                "Decision": st.column_config.TextColumn(t("col_decision")),
             },
             width="stretch",
+            height=240,
         )
     else:
-        st.info("No audit logs found.")
+        st.info(t("no_audit_data"))
 
-# If sidebar not accessed yet in main block, define t(key) for main block:
-def t(key: str) -> str:
-    return TRANSLATIONS.get(lang_code, TRANSLATIONS["EN"]).get(key, key)
 
-# Main Page Header
+# Main page header
+st.markdown(f'<div class="gov-meta">{t("agency")}</div>', unsafe_allow_html=True)
 st.title(t("title"))
-st.markdown(t("subtitle"))
-
+st.caption(t("subtitle"))
 st.divider()
 
-# Input Section: PDF Uploader with dynamic key + One-Click Samples + Text Area
-st.subheader(t("input_header"))
+# Main tabs: single request verification and bid evaluation matrix
+tab_single, tab_matrix = st.tabs([t("tab_single"), t("tab_matrix")])
 
-uploaded_pdf = st.file_uploader(
-    t("pdf_label"),
-    type=["pdf"],
-    key=f"pdf_upload_{st.session_state['uploader_key']}",
-    help="Upload an invoice, tender offer, or quotation in PDF format. Extracted text will populate the text area below.",
-)
+with tab_single:
+    st.subheader(t("input_header"))
 
-if uploaded_pdf is not None:
-    uploaded_pdf.seek(0)
-    # Only run extraction if a new file is uploaded
-    if st.session_state.get("last_uploaded_pdf") != uploaded_pdf.name:
-        try:
-            reader = PdfReader(uploaded_pdf)
-            extracted_pages = []
-            for page in reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    extracted_pages.append(page_text)
-            extracted_text = "\n\n".join(extracted_pages).strip()
+    form_key = st.session_state["form_key"]
+    text_widget_key = f"request_text_{form_key}"
+    if text_widget_key not in st.session_state:
+        st.session_state[text_widget_key] = st.session_state.get("draft_text", "")
 
-            if extracted_text:
-                st.session_state["request_text_area"] = extracted_text
-                st.session_state["last_uploaded_pdf"] = uploaded_pdf.name
-                st.toast(f"Extracted {len(extracted_text)} characters from {uploaded_pdf.name}", icon="📄")
-            else:
-                st.warning(f"No extractable text found in '{uploaded_pdf.name}'.")
-        except Exception as e:
-            st.error(f"Failed to read PDF file: {e}")
+    uploaded_pdf = st.file_uploader(
+        t("pdf_label"),
+        type=["pdf"],
+        key=f"pdf_upload_{form_key}",
+        help=t("pdf_help"),
+    )
 
-# One-Click Demo Sample Buttons (Task 8)
-st.markdown(f"**{t('sample_header')}**")
-s_col1, s_col2, s_col3 = st.columns(3)
-with s_col1:
-    if st.button(t("sample_1"), use_container_width=True):
-        st.session_state["request_text_area"] = SAMPLE_REQUESTS[lang_code]["valid"]
-        st.session_state["last_evaluation"] = None
-        st.session_state["committed"] = False
-        st.rerun()
-with s_col2:
-    if st.button(t("sample_2"), use_container_width=True):
-        st.session_state["request_text_area"] = SAMPLE_REQUESTS[lang_code]["unapproved"]
-        st.session_state["last_evaluation"] = None
-        st.session_state["committed"] = False
-        st.rerun()
-with s_col3:
-    if st.button(t("sample_3"), use_container_width=True):
-        st.session_state["request_text_area"] = SAMPLE_REQUESTS[lang_code]["review"]
-        st.session_state["last_evaluation"] = None
-        st.session_state["committed"] = False
-        st.rerun()
-
-request_text = st.text_area(
-    t("textarea_label"),
-    key="request_text_area",
-    height=150,
-    placeholder=t("textarea_placeholder"),
-    help="You can review or edit the text before evaluating.",
-)
-
-col_eval, col_clear = st.columns([4, 1])
-with col_eval:
-    evaluate_clicked = st.button(t("evaluate_btn"), type="primary", use_container_width=True)
-with col_clear:
-    st.button(t("clear_btn"), use_container_width=True, on_click=clear_form)
-
-if evaluate_clicked:
-    current_input = st.session_state.get("request_text_area", "").strip()
-    if not current_input:
-        st.warning("⚠️ Please provide procurement request text or upload a PDF before evaluating.")
-    else:
-        with st.spinner("Analyzing request against municipal database and AI policies..."):
+    if uploaded_pdf is not None:
+        uploaded_pdf.seek(0)
+        if st.session_state.get("last_uploaded_pdf") != uploaded_pdf.name:
             try:
-                evaluation = evaluate_request(current_input)
-                st.session_state["last_evaluation"] = evaluation
-                st.session_state["committed"] = False
+                reader = PdfReader(uploaded_pdf)
+                extracted_pages = []
+                for page in reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        extracted_pages.append(page_text)
+                extracted_text = "\n\n".join(extracted_pages).strip()
+
+                if extracted_text:
+                    reset_decision_state()
+                    st.session_state["draft_text"] = extracted_text
+                    st.session_state[text_widget_key] = extracted_text
+                    st.session_state["last_uploaded_pdf"] = uploaded_pdf.name
+                    st.toast(t("pdf_extracted").format(count=len(extracted_text)))
+                else:
+                    st.warning(t("pdf_extract_warning"))
             except Exception as e:
-                # Fallback mock evaluation if API key is missing or offline
-                is_unapproved = "techcorp" in current_input.lower()
-                is_review = "buildcorp" in current_input.lower() or "520" in current_input
-                decision_val = "REJECTED" if is_unapproved else ("REQUIRES_REVIEW" if is_review else "APPROVED")
-                supplier_val = "TechCorp" if is_unapproved else ("BuildCorp" if is_review else "Dell")
-                amount_val = 48000.0 if is_unapproved else (520000.0 if is_review else 22500.0)
-                category_val = "Construction" if is_review else "IT"
+                st.error(t("pdf_extract_error").format(error=e))
 
-                evaluation = {
-                    "supplier_name": supplier_val,
-                    "amount": amount_val,
-                    "category": category_val,
-                    "summary": f"Procurement request for {supplier_val} amounting to €{amount_val:,.2f}.",
-                    "decision": decision_val,
-                    "reasoning": f"1. Extracted Supplier: {supplier_val}, Amount: €{amount_val:,.2f}, Category: {category_val}.\n2. Evaluated against municipal DB.\n3. Final Decision: {decision_val} (Offline fallback mode)."
-                }
-                st.session_state["last_evaluation"] = evaluation
-                st.session_state["committed"] = False
+    st.markdown(f"**{t('sample_header')}**")
+    s_col1, s_col2, s_col3 = st.columns(3)
+    with s_col1:
+        if st.button(t("sample_1"), use_container_width=True):
+            reset_decision_state()
+            st.session_state["draft_text"] = SAMPLE_REQUESTS[st.session_state["lang"]]["valid"]
+            st.session_state[text_widget_key] = SAMPLE_REQUESTS[st.session_state["lang"]]["valid"]
+            st.rerun()
+    with s_col2:
+        if st.button(t("sample_2"), use_container_width=True):
+            reset_decision_state()
+            st.session_state["draft_text"] = SAMPLE_REQUESTS[st.session_state["lang"]]["unapproved"]
+            st.session_state[text_widget_key] = SAMPLE_REQUESTS[st.session_state["lang"]]["unapproved"]
+            st.rerun()
+    with s_col3:
+        if st.button(t("sample_3"), use_container_width=True):
+            reset_decision_state()
+            st.session_state["draft_text"] = SAMPLE_REQUESTS[st.session_state["lang"]]["review"]
+            st.session_state[text_widget_key] = SAMPLE_REQUESTS[st.session_state["lang"]]["review"]
+            st.rerun()
 
-# Decision & Reasoning Section (Task 6 & Task 7)
-if st.session_state.get("last_evaluation"):
-    st.divider()
-    eval_data = st.session_state["last_evaluation"]
-    decision = str(eval_data.get("decision", "REQUIRES_REVIEW")).strip().upper()
-    reasoning = eval_data.get("reasoning", "")
+    request_text = st.text_area(
+        t("textarea_label"),
+        key=text_widget_key,
+        height=160,
+        placeholder=t("textarea_placeholder"),
+    )
+    st.session_state["draft_text"] = request_text or ""
 
-    st.subheader(t("decision_header"))
+    col_eval, col_clear = st.columns([4, 1])
+    with col_eval:
+        evaluate_clicked = st.button(t("evaluate_btn"), type="primary", use_container_width=True)
+    with col_clear:
+        st.button(t("clear_btn"), use_container_width=True, on_click=clear_form)
 
-    # Color-coded decision banner (Green = Approved, Yellow = Requires Human Review, Red = Rejected)
-    if decision in ["APPROVED", "APPROVE"]:
-        st.success(t("status_approved"))
-    elif decision in ["REQUIRES_REVIEW", "REQUIRES REVIEW", "REVIEW"]:
-        st.warning(t("status_review"))
-    else:
-        st.error(t("status_rejected"))
-
-    # Step-by-step Reasoning breakdown
-    st.markdown(f"#### {t('reasoning_header')}")
-    with st.container(border=True):
-        if reasoning:
-            st.markdown(reasoning)
+    if evaluate_clicked:
+        current_input = (request_text or "").strip()
+        if not current_input:
+            st.warning(t("no_input_warning"))
         else:
-            st.markdown("_No reasoning provided._")
-
-    st.divider()
-
-    # Human-in-the-Loop Action Buttons (Task 7)
-    if not st.session_state.get("committed", False):
-        st.markdown("### ✍️ Caseworker Action & Authorization")
-        hc1, hc2 = st.columns(2)
-        with hc1:
-            if st.button(t("commit_approve_btn"), type="primary", use_container_width=True):
+            with st.spinner(t("spinner_eval")):
                 try:
-                    commit_decision(
-                        request_text=st.session_state.get("request_text_area", ""),
-                        supplier=eval_data.get("supplier_name", "Unknown"),
-                        amount=float(eval_data.get("amount", 0.0)),
-                        category=eval_data.get("category", "IT"),
-                        decision="APPROVED",
-                        reasoning=str(reasoning)
-                    )
-                    st.success(t("committed_success"))
-                    st.session_state["committed"] = True
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error committing decision: {e}")
-        with hc2:
-            if st.button(t("commit_reject_btn"), use_container_width=True):
-                try:
-                    commit_decision(
-                        request_text=st.session_state.get("request_text_area", ""),
-                        supplier=eval_data.get("supplier_name", "Unknown"),
-                        amount=float(eval_data.get("amount", 0.0)),
-                        category=eval_data.get("category", "IT"),
-                        decision="REJECTED",
-                        reasoning=str(reasoning)
-                    )
-                    st.warning(t("committed_reject"))
-                    st.session_state["committed"] = True
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error committing rejection: {e}")
-    else:
-        st.info(t("already_committed"))
+                    evaluation = evaluate_request(current_input)
+                except Exception:
+                    evaluation = build_offline_evaluation(current_input)
+                else:
+                    if str(evaluation.get("supplier_name", "")).strip().lower() == "unknown":
+                        evaluation = build_offline_evaluation(current_input)
 
-    st.divider()
-    # Process Next Request button triggering clear_form callback
-    st.button(t("next_request_btn"), use_container_width=True, on_click=clear_form, type="secondary")
+            st.session_state["last_evaluation"] = evaluation
+            st.session_state["committed"] = False
+            st.session_state["committed_decision"] = None
+            st.session_state["approved_pdf"] = None
+            st.session_state["approved_pdf_name"] = None
+            st.session_state.pop("pdf_error", None)
+            st.session_state["_reset_form"] = True
+            st.rerun()
+
+    # Decision and reasoning section
+    if st.session_state.get("last_evaluation"):
+        st.divider()
+        eval_data = st.session_state["last_evaluation"]
+        decision = str(eval_data.get("decision", "REQUIRES_REVIEW")).strip().upper()
+        reasoning = eval_data.get("reasoning", "")
+
+        st.subheader(t("decision_header"))
+
+        if decision in ["APPROVED", "APPROVE"]:
+            st.success(t("status_approved"))
+        elif decision in ["REQUIRES_REVIEW", "REQUIRES REVIEW", "REVIEW"]:
+            st.warning(t("status_review"))
+        else:
+            st.error(t("status_rejected"))
+
+        st.markdown(f"#### {t('reasoning_header')}")
+        with st.container(border=True):
+            if reasoning:
+                st.markdown(reasoning)
+            else:
+                st.caption(t("no_reasoning"))
+
+        st.divider()
+
+        # Human-in-the-loop action. The PDF is generated only inside the approval
+        # branch, after the budget and audit log have been committed.
+        if not st.session_state.get("committed", False):
+            st.subheader(t("approval_header"))
+            st.caption(t("approval_note"))
+            hc1, hc2 = st.columns(2)
+            with hc1:
+                if st.button(t("commit_approve_btn"), type="primary", use_container_width=True):
+                    try:
+                        commit_decision(
+                            request_text=eval_data.get("summary", ""),
+                            supplier=eval_data.get("supplier_name", "Unbekannt"),
+                            amount=float(eval_data.get("amount", 0.0)),
+                            category=eval_data.get("category", "IT-Ausstattung"),
+                            decision="APPROVED",
+                            reasoning=str(reasoning),
+                        )
+                    except Exception as e:
+                        st.error(t("commit_error").format(error=e))
+                    else:
+                        st.session_state["committed"] = True
+                        st.session_state["committed_decision"] = "APPROVED"
+                        try:
+                            pdf_bytes = generate_anmeldebogen_pdf(eval_data)
+                            st.session_state["approved_pdf"] = pdf_bytes
+                            st.session_state["approved_pdf_name"] = (
+                                f"Anmeldebogen_{eval_data.get('procurement_type', 'LuD')}_"
+                                f"{datetime.now().strftime('%Y%m%d')}.pdf"
+                            )
+                            st.session_state.pop("pdf_error", None)
+                        except Exception as e:
+                            st.session_state["approved_pdf"] = None
+                            st.session_state["pdf_error"] = str(e)
+                        st.rerun()
+            with hc2:
+                if st.button(t("commit_reject_btn"), use_container_width=True):
+                    try:
+                        commit_decision(
+                            request_text=eval_data.get("summary", ""),
+                            supplier=eval_data.get("supplier_name", "Unbekannt"),
+                            amount=float(eval_data.get("amount", 0.0)),
+                            category=eval_data.get("category", "IT-Ausstattung"),
+                            decision="REJECTED",
+                            reasoning=str(reasoning),
+                        )
+                    except Exception as e:
+                        st.error(t("commit_error").format(error=e))
+                    else:
+                        st.session_state["committed"] = True
+                        st.session_state["committed_decision"] = "REJECTED"
+                        st.session_state["approved_pdf"] = None
+                        st.session_state["approved_pdf_name"] = None
+                        st.session_state.pop("pdf_error", None)
+                        st.rerun()
+        else:
+            if st.session_state.get("committed_decision") == "APPROVED":
+                st.success(t("committed_success"))
+
+                if st.session_state.get("pdf_error"):
+                    st.error(f"{t('pdf_error')} {st.session_state['pdf_error']}")
+
+                pdf_bytes = st.session_state.get("approved_pdf")
+                if pdf_bytes:
+                    st.subheader(t("form_header"))
+                    st.caption(t("form_note"))
+                    st.download_button(
+                        label=t("download_form_btn"),
+                        data=pdf_bytes,
+                        file_name=st.session_state.get("approved_pdf_name") or "Anmeldebogen.pdf",
+                        mime="application/pdf",
+                        type="primary",
+                        use_container_width=True,
+                    )
+            else:
+                st.warning(t("committed_reject"))
+
+        st.divider()
+        st.button(t("next_request_btn"), use_container_width=True, on_click=clear_form)
+
+
+# Bid evaluation matrix tab
+with tab_matrix:
+    st.subheader(t("matrix_header"))
+    st.caption(t("matrix_desc"))
+
+    st.file_uploader(
+        t("matrix_pdfs_label"),
+        type=["pdf"],
+        accept_multiple_files=True,
+        help=t("matrix_pdfs_help"),
+    )
+
+    st.markdown(f"#### {t('bidder_config_header')}")
+
+    col_b1, col_b2, col_b3 = st.columns(3)
+    with col_b1:
+        bid1_name = st.text_input(t("bidder_1"), "Dell Technologies")
+        bid1_price = st.number_input(t("price_label"), value=14500.0, key="b1_price")
+        bid1_ref = st.slider(t("references_label"), 0, 10, 8, key="b1_ref")
+        bid1_con = st.slider(t("concept_label"), 0, 10, 8, key="b1_con")
+    with col_b2:
+        bid2_name = st.text_input(t("bidder_2"), "Bechtle GmbH")
+        bid2_price = st.number_input(t("price_label"), value=15200.0, key="b2_price")
+        bid2_ref = st.slider(t("references_label"), 0, 10, 7, key="b2_ref")
+        bid2_con = st.slider(t("concept_label"), 0, 10, 7, key="b2_con")
+    with col_b3:
+        bid3_name = st.text_input(t("bidder_3"), "OfficeDepot Deutschland")
+        bid3_price = st.number_input(t("price_label"), value=16200.0, key="b3_price")
+        bid3_ref = st.slider(t("references_label"), 0, 10, 6, key="b3_ref")
+        bid3_con = st.slider(t("concept_label"), 0, 10, 6, key="b3_con")
+
+    if st.button(t("eval_bids_btn"), type="primary", use_container_width=True):
+        bids_input = [
+            {"bidder": bid1_name, "price": bid1_price, "references_score": bid1_ref, "concept_score": bid1_con},
+            {"bidder": bid2_name, "price": bid2_price, "references_score": bid2_ref, "concept_score": bid2_con},
+            {"bidder": bid3_name, "price": bid3_price, "references_score": bid3_ref, "concept_score": bid3_con},
+        ]
+
+        with st.spinner(t("spinner_bids")):
+            eval_matrix_res = evaluate_bids(bids_input)
+            st.session_state["matrix_result"] = eval_matrix_res
+
+    if st.session_state.get("matrix_result"):
+        res = st.session_state["matrix_result"]
+        winner = res["winner"]
+        ranked = res["ranked_bids"]
+        losers = res["losers"]
+
+        st.divider()
+        st.markdown(f"### {t('matrix_winner_header')} **{winner['bidder']}**")
+        st.success(
+            t("matrix_winner_success").format(
+                points=winner["total_points"],
+                price=f"€{winner['price']:,.2f}",
+            )
+        )
+
+        st.markdown(f"#### {t('matrix_ranking_header')}")
+        df_ranked = pd.DataFrame(ranked)
+        st.dataframe(df_ranked, width="stretch", hide_index=True)
+
+        st.divider()
+        st.markdown(f"### {t('matrix_rejections_header')}")
+        st.caption(t("matrix_rejections_desc"))
+
+        with st.expander(t("matrix_rejections_expander"), expanded=True):
+            for loser in losers:
+                st.markdown(
+                    f"#### "
+                    + t("matrix_rejection_title").format(
+                        bidder=loser["bidder"],
+                        price=f"€{loser['price']:,.2f}",
+                        points=loser["total_points"],
+                    )
+                )
+                st.info(loser.get("legal_justification", t("matrix_no_reason")))
+                st.divider()
