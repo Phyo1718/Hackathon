@@ -15,11 +15,11 @@
 - [ ] **Task 4:** Implement `evaluate_request(text)` in `src/agent.py` using **Gemini Structured Outputs** (`google-genai` SDK with a Pydantic schema for `supplier_name`, `amount`, `category`, and `summary`) to extract parameters, run the tool checks, and return a decision (`APPROVED`, `REQUIRES_REVIEW`, or `REJECTED`) with step-by-step reasoning.
 
 ## 🎨 Phase 3: The User Interface (`app.py`)
-- [ ] **Task 5:** Build the Streamlit UI in `app.py` with:
+- [x] **Task 5:** Build the Streamlit UI in `app.py` with:
   - A PDF uploader (`st.file_uploader` using `pypdf`) that extracts text directly into the request text area.
   - A text area for pasting/editing procurement requests and an **"Evaluate Request"** button.
   - Live sidebar tables showing current `Budgets` and `Audit_Logs` from `data/mock_data.db`, plus a **"Reset Demo Data"** button.
-- [ ] **Task 6:** Display the Agent's decision in a color-coded status banner (Green = Approved, Yellow = Requires Human Review, Red = Rejected) alongside the step-by-step **Reasoning** breakdown.
+- [x] **Task 6:** Display the Agent's decision in a color-coded status banner (Green = Approved, Yellow = Requires Human Review, Red = Rejected) alongside the step-by-step **Reasoning** breakdown.
 
 ## 🔗 Phase 4: Integration, Trust & Demo Polish
 - [ ] **Task 7:** Connect `app.py` to `src/agent.py` and add **"Approve & Commit to Budget"** / **"Reject"** human-in-the-loop buttons so caseworkers can confirm borderline or valid requests and update `data/mock_data.db` live.
