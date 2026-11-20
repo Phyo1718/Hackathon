@@ -23,3 +23,17 @@ To reduce the workload of public administration caseworkers by automatically che
 3. **Separation of Concerns:** UI code stays in `app.py`. Database queries and AI logic stay in `src/agent.py`.
 4. **Mock Data Only:** Do not attempt to connect to real government APIs. All data must be mock data stored in the local SQLite database.
 5. **Human-in-the-Loop Action:** When a caseworker clicks "Approve" in the UI, commit the budget deduction and audit log entry to data/mock_data.db so the database state updates live during the demo.
+
+# Reference Documents (Hildesheim Procurement)
+Located in the `docs/` folder. Use these documents as the absolute source of truth for formatting outputs, understanding the workflow, and applying legal rules.
+
+1. `Challange 1 Beschreibung Routineprozesse.pdf`: The master process document. It explains the manual pain points of the Hildesheim administration. Use this to understand the "System Fit" and the steps a caseworker must take.
+2. `Anmeldebogen_LuD_Hackathon.pdf`: The official 5-page registration form for a NEW procurement (Lieferung und Dienstleistung). Use this template when generating a new procurement document.
+3. `Anmeldebogen_Auftragserweiterung_Hackathon.pdf`: The official form for a CONTRACT EXTENSION. If a user requests more of the same item from an already approved supplier, use this shorter form instead of the LuD form.
+4. `Antrag_ED_Hackathon.pdf`: The form for budget reallocations (Etat-Deckung). Use this if a request exceeds a specific budget and needs funds moved from another account.
+5. `Auswertung_Hackathon.XLSX`: The official Excel scoring matrix. It uses a specific interpolation formula for Price (30%), References (30%), and Concept (20%). Use this logic if evaluating multiple suppliers.
+
+**Key Rules for the Agent:**
+- If a request is for a brand new item/supplier, generate a draft based on `Anmeldebogen_LuD`.
+- If a request says "extend" or "buy 5 more of the same," generate a draft based on `Anmeldebogen_Auftragserweiterung`.
+- Always cite which official form you are generating so the caseworker knows.
