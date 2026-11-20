@@ -417,6 +417,40 @@ def calculate_price_score(price: float, lowest_price: float) -> float:
     return max(0.0, min(10.0, points))
 
 
+def generate_rejection_letters(winner: Dict[str, Any], losers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Generates a Gemini rejection letter for each loser, in place.
+
+    On failure the loser gets legal_justification = None and letter_error = <message>;
+    no template text is substituted.
+    """
+    try:
+        client = get_genai_client()
+    except Exception as e:
+        for loser in losers:
+            loser["legal_justification"] = None
+            loser["letter_error"] = str(e)
+        return losers
+
+    for loser in losers:
+        prompt = f"""
+        You are a public procurement specialist for the City of Hildesheim under German procurement law (UVgO / GWB).
+        Generate a formal, legally binding rejection letter paragraph (Begründung nach § 13 UVgO) explaining why Bidder '{loser['bidder']}' (Price: €{loser['price']:,.2f}, Total Score: {loser['total_points']} points) was not selected, and why the winning bidder '{winner['bidder']}' (Price: €{winner['price']:,.2f}, Total Score: {winner['total_points']} points) won based on price (30%), references (30%), and concept (20%).
+        Write in professional German.
+        """
+        try:
+            resp = client.models.generate_content(
+                model="gemini-3.5-flash-lite",
+                contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.2)
+            )
+            loser["legal_justification"] = resp.text.strip()
+            loser["letter_error"] = None
+        except Exception as e:
+            loser["legal_justification"] = None
+            loser["letter_error"] = str(e)
+    return losers
+
+
 def evaluate_bids(bids_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Evaluates multiple bids using the 30/30/20 scoring matrix and generates § 13 UVgO legal rejections."""
     if not bids_data:
@@ -455,25 +489,10 @@ def evaluate_bids(bids_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     evaluated_bids.sort(key=lambda x: x["total_points"], reverse=True)
     winner = evaluated_bids[0]
     losers = evaluated_bids[1:]
-    
-    client = genai.Client(http_options=types.HttpOptions(timeout=120000))
-    
-    for loser in losers:
-        prompt = f"""
-        You are a public procurement specialist for the City of Hildesheim under German procurement law (UVgO / GWB).
-        Generate a formal, legally binding rejection letter paragraph (Begründung nach § 13 UVgO) explaining why Bidder '{loser['bidder']}' (Price: €{loser['price']:,.2f}, Total Score: {loser['total_points']} points) was not selected, and why the winning bidder '{winner['bidder']}' (Price: €{winner['price']:,.2f}, Total Score: {winner['total_points']} points) won based on price (30%), references (30%), and concept (20%).
-        Write in professional German.
-        """
-        try:
-            resp = client.models.generate_content(
-                model="gemini-3.5-flash-lite",
-                contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.2)
-            )
-            loser["legal_justification"] = resp.text.strip()
-        except Exception:
-            loser["legal_justification"] = f"Gemäß § 13 UVgO wird Ihr Angebot nicht berücksichtigt, da Ihr Gesamtscore von {loser['total_points']} Punkten unter dem des ausgewählten Bieters {winner['bidder']} ({winner['total_points']} Punkte) liegt."
-            
+
+    # Scoring above is deterministic and always returned; letters may fail independently.
+    generate_rejection_letters(winner, losers)
+
     return {
         "winner": winner,
         "ranked_bids": evaluated_bids,

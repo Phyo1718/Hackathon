@@ -12,6 +12,7 @@ from src.agent import (
     evaluate_bids,
     evaluate_request,
     generate_anmeldebogen_pdf,
+    generate_rejection_letters,
     has_api_key,
 )
 from src.init_db import DB_PATH, init_db
@@ -128,6 +129,8 @@ TRANSLATIONS = {
         "matrix_rejections_expander": "Rejection reasons for unsuccessful bidders under § 13 UVgO",
         "matrix_rejection_title": "Rejection to {bidder} ({price} | {points} points)",
         "matrix_no_reason": "No reason available.",
+        "letter_error": "The rejection letter for {bidder} could not be generated: {error}",
+        "retry_letters_btn": "Retry letters",
     },
     "DE": {
         "agency": "Stadt Hildesheim | Zentrale Vergabestelle",
@@ -213,6 +216,8 @@ TRANSLATIONS = {
         "matrix_rejections_expander": "Begründungen für abgelehnte Bieter nach § 13 UVgO",
         "matrix_rejection_title": "Absage an {bidder} ({price} | {points} Punkte)",
         "matrix_no_reason": "Keine Begründung vorhanden.",
+        "letter_error": "Das Absageschreiben für {bidder} konnte nicht erstellt werden: {error}",
+        "retry_letters_btn": "Absageschreiben erneut erstellen",
     },
 }
 
@@ -755,12 +760,18 @@ with tab_matrix:
         )
 
         st.markdown(f"#### {t('matrix_ranking_header')}")
-        df_ranked = pd.DataFrame(ranked)
+        df_ranked = pd.DataFrame(ranked).drop(columns=["legal_justification", "letter_error"], errors="ignore")
         st.dataframe(df_ranked, width="stretch", hide_index=True)
 
         st.divider()
         st.markdown(f"### {t('matrix_rejections_header')}")
         st.caption(t("matrix_rejections_desc"))
+
+        failed_losers = [loser for loser in losers if loser.get("letter_error")]
+        if failed_losers and st.button(t("retry_letters_btn"), key="retry_letters_btn"):
+            with st.spinner(t("spinner_bids")):
+                generate_rejection_letters(winner, failed_losers)
+            st.rerun()
 
         with st.expander(t("matrix_rejections_expander"), expanded=True):
             for loser in losers:
@@ -772,5 +783,10 @@ with tab_matrix:
                         points=loser["total_points"],
                     )
                 )
-                st.info(loser.get("legal_justification", t("matrix_no_reason")))
+                if loser.get("letter_error"):
+                    st.error(t("letter_error").format(bidder=loser["bidder"], error=loser["letter_error"]))
+                elif loser.get("legal_justification"):
+                    st.info(loser["legal_justification"])
+                else:
+                    st.caption(t("matrix_no_reason"))
                 st.divider()
