@@ -301,34 +301,49 @@ def generate_anmeldebogen_pdf(eval_data: Dict[str, Any]) -> bytes:
 
     return bytes(pdf.output())
 
+def calculate_price_score(price: float, lowest_price: float) -> float:
+    """Price points (0-10) via the interpolation of docs/Auswertung_Hackathon.XLSX, sheet "Übersicht"."""
+    if price <= 0 or lowest_price <= 0:
+        raise ValueError(f"Bid prices must be greater than 0 (got price={price}, lowest={lowest_price}).")
+    # Excel: E7 = 10 points for the lowest bid, D9 = 2 * D7 (fictitious bid with 0 points),
+    # E8 = (E7 / D7) * (D9 - D8). Clamped so bids at or above 2 x lowest get 0, never negative.
+    points = (10.0 / lowest_price) * (2 * lowest_price - price)
+    return max(0.0, min(10.0, points))
+
+
 def evaluate_bids(bids_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Evaluates multiple bids using the 30/30/20 scoring matrix and generates § 13 UVgO legal rejections."""
     if not bids_data:
         return {"error": "No bids provided"}
-    
-    prices = [float(b["price"]) for b in bids_data]
-    min_price = min(prices) if prices else 1.0
-    
+
+    for b in bids_data:
+        if float(b["price"]) <= 0:
+            raise ValueError(f"Bid price for '{b['bidder']}' must be greater than 0 (got {b['price']}).")
+
+    min_price = min(float(b["price"]) for b in bids_data)
+
     evaluated_bids = []
     for b in bids_data:
         price = float(b["price"])
         ref_score = float(b.get("references_score", 5))
         concept_score = float(b.get("concept_score", 5))
-        
-        price_pts = (min_price / price) * 300 if price > 0 else 0.0
+
+        price_score = calculate_price_score(price, min_price)
+        price_pts = price_score * 30.0
         ref_pts = ref_score * 30.0
         concept_pts = concept_score * 20.0
         total_pts = price_pts + ref_pts + concept_pts
-        
+
         evaluated_bids.append({
             "bidder": b["bidder"],
             "price": price,
+            "price_score": round(price_score, 2),
             "references_score": ref_score,
             "concept_score": concept_score,
-            "price_points": round(price_pts, 1),
-            "reference_points": round(ref_pts, 1),
-            "concept_points": round(concept_pts, 1),
-            "total_points": round(total_pts, 1)
+            "price_points": round(price_pts, 2),
+            "reference_points": round(ref_pts, 2),
+            "concept_points": round(concept_pts, 2),
+            "total_points": round(total_pts, 2)
         })
     
     evaluated_bids.sort(key=lambda x: x["total_points"], reverse=True)

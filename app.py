@@ -118,6 +118,7 @@ TRANSLATIONS = {
         "references_label": "References (0-10)",
         "concept_label": "Concept (0-10)",
         "eval_bids_btn": "Run 30/30/20 Bid Evaluation",
+        "invalid_price_error": "Every bid price must be greater than EUR 0. Please correct: {bidders}",
         "spinner_bids": "Calculating the 30/30/20 matrix and preparing rejection letters under § 13 UVgO...",
         "matrix_winner_header": "Recommended award:",
         "matrix_winner_success": "Most economical bid with **{points}** total points (bid price: {price}).",
@@ -199,6 +200,7 @@ TRANSLATIONS = {
         "references_label": "Referenzen (0-10)",
         "concept_label": "Konzept (0-10)",
         "eval_bids_btn": "30/30/20-Angebotswertung starten",
+        "invalid_price_error": "Jeder Angebotspreis muss größer als 0 EUR sein. Bitte korrigieren: {bidders}",
         "spinner_bids": "30/30/20-Matrix wird berechnet und Absageschreiben nach § 13 UVgO werden erstellt...",
         "matrix_winner_header": "Empfohlener Zuschlagsträger:",
         "matrix_winner_success": "Wirtschaftlichstes Angebot mit **{points}** Gesamtpunkten (Angebotspreis: {price}).",
@@ -741,9 +743,19 @@ with tab_matrix:
             {"bidder": bid3_name, "price": bid3_price, "references_score": bid3_ref, "concept_score": bid3_con},
         ]
 
-        with st.spinner(t("spinner_bids")):
-            eval_matrix_res = evaluate_bids(bids_input)
-            st.session_state["matrix_result"] = eval_matrix_res
+        invalid_bidders = [b["bidder"] for b in bids_input if b["price"] <= 0]
+        if invalid_bidders:
+            st.session_state.pop("matrix_result", None)
+            st.error(t("invalid_price_error").format(bidders=", ".join(invalid_bidders)))
+        else:
+            with st.spinner(t("spinner_bids")):
+                try:
+                    eval_matrix_res = evaluate_bids(bids_input)
+                except ValueError as e:
+                    st.session_state.pop("matrix_result", None)
+                    st.error(str(e))
+                else:
+                    st.session_state["matrix_result"] = eval_matrix_res
 
     if st.session_state.get("matrix_result"):
         res = st.session_state["matrix_result"]
