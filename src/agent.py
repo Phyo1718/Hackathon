@@ -8,9 +8,9 @@ from google import genai
 from google.genai import types
 from fpdf import FPDF
 
-load_dotenv()
+from src.init_db import get_db_path
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "../data/mock_data.db")
+load_dotenv()
 
 
 class MissingApiKeyError(RuntimeError):
@@ -42,7 +42,7 @@ class ExtractedRequest(BaseModel):
     summary: str = Field(description="Brief 1-sentence summary of the procurement request.")
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
     return conn
 

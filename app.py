@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
@@ -15,7 +16,7 @@ from src.agent import (
     generate_rejection_letters,
     has_api_key,
 )
-from src.init_db import DB_PATH, init_db
+from src.init_db import get_db_path, init_db
 
 # Load environment variables
 load_dotenv()
@@ -23,10 +24,10 @@ load_dotenv()
 
 def database_needs_init() -> bool:
     """Initialise the database only when it is missing or uses an outdated schema."""
-    if not Path(DB_PATH).exists():
+    if not Path(get_db_path()).exists():
         return True
     try:
-        with sqlite3.connect(DB_PATH) as conn:
+        with closing(sqlite3.connect(get_db_path())) as conn:
             columns = {row[1] for row in conn.execute("PRAGMA table_info(Budgets);")}
         return "Konto" not in columns
     except Exception:
@@ -242,13 +243,13 @@ SAMPLE_REQUESTS = {
 
 def get_budgets_df() -> pd.DataFrame:
     """Reads the municipal budget positions from data/mock_data.db."""
-    if not Path(DB_PATH).exists():
+    if not Path(get_db_path()).exists():
         try:
             init_db()
         except Exception:
             pass
     try:
-        with sqlite3.connect(DB_PATH) as conn:
+        with closing(sqlite3.connect(get_db_path())) as conn:
             df = pd.read_sql_query(
                 "SELECT Category, Konto, Total_Budget, Remaining_Budget FROM Budgets ORDER BY Category",
                 conn,
@@ -268,13 +269,13 @@ def get_budgets_df() -> pd.DataFrame:
 
 def get_audit_logs_df() -> pd.DataFrame:
     """Reads the latest audit entries from data/mock_data.db."""
-    if not Path(DB_PATH).exists():
+    if not Path(get_db_path()).exists():
         try:
             init_db()
         except Exception:
             pass
     try:
-        with sqlite3.connect(DB_PATH) as conn:
+        with closing(sqlite3.connect(get_db_path())) as conn:
             df = pd.read_sql_query(
                 "SELECT Id, Timestamp, Supplier, Category, Amount, Decision FROM Audit_Logs ORDER BY Id DESC LIMIT 20",
                 conn,
@@ -530,7 +531,7 @@ with tab_single:
 
     col_eval, col_clear = st.columns([4, 1])
     with col_eval:
-        evaluate_clicked = st.button(t("evaluate_btn"), type="primary", use_container_width=True)
+        evaluate_clicked = st.button(t("evaluate_btn"), key="evaluate_btn", type="primary", use_container_width=True)
     with col_clear:
         st.button(t("clear_btn"), use_container_width=True, on_click=clear_form)
 

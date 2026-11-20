@@ -1,13 +1,19 @@
 import os
 import sqlite3
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "../data/mock_data.db")
+DEFAULT_DB_PATH = os.path.join(os.path.dirname(__file__), "../data/mock_data.db")
+
+
+def get_db_path() -> str:
+    """Database location; override with the PROCUREMENT_DB_PATH environment variable."""
+    return os.environ.get("PROCUREMENT_DB_PATH") or DEFAULT_DB_PATH
 
 
 def init_db():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    db_path = get_db_path()
+    os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     # Drop existing tables to ensure a clean reset
@@ -135,7 +141,7 @@ def init_db():
 
     conn.commit()
     conn.close()
-    print(f"Database successfully initialized and seeded with realistic municipal data at: {DB_PATH}")
+    print(f"Database successfully initialized and seeded with realistic municipal data at: {db_path}")
 
 
 if __name__ == "__main__":
