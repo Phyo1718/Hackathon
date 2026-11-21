@@ -65,7 +65,8 @@ BUDGET_LINES = [
 # (budgets, contract-extension detection) and the request history (AI-oversight figures).
 # The "H" references keep them out of the numbering of new requests. For the bid evaluation
 # of VA-2026-0001 the three demo bidders differ in track record: Bechtle has completed IT
-# contracts, Dell is on the approved list only, OfficeDepot is approved for office supplies only.
+# IT orders, Dell is on the approved list only, OfficeDepot has an approved office-supplies order (H03),
+# which counts as a previous order for any request.
 HISTORICAL_REQUESTS = [
     {"ref": "VA-2026-H01", "days_ago": 160, "supplier": "Cancom SE", "amount": 18500.0, "category": "IT-Ausstattung",
      "text": {"DE": "Beschaffung von 20 Arbeitsplatzrechnern für die Stadtverwaltung.",

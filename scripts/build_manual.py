@@ -11,7 +11,7 @@ Steps, all offline in headless Chrome (no CDN):
    "Reset Demo Data", walks through the demo in DE and EN and saves cropped screenshots with
    numbered red markers to docs/manual/img/.
 3. PDF: docs/manual/user_manual_{de,en}.md -> HTML (local marked copy, print CSS in the app's
-   navy and Source Sans) -> PDF via Chrome's print function.
+   colours and fonts: src/ui_theme.py, static/fonts) -> PDF via Chrome's print function.
 """
 import argparse
 import json
@@ -44,7 +44,9 @@ VERSION = "1.0 (Hackathon-Prototyp)"
 # One window size for every screenshot; rendered at 2x for sharp images in the PDF
 WINDOW = (1440, 1800)
 SCALE = 2
-NAVY = "#1E3A8A"
+# The app's palette (src/ui_theme.py TOKENS / CSS variables)
+# (the diagram node colours are set in each .mmd file with the same values)
+INK, MUTED, LINE, PAPER = "#45465A", "#6B6C7A", "#E4E2DC", "#F8F7F4"
 
 MERMAID_CONFIG = {
     "startOnLoad": False,
@@ -56,23 +58,28 @@ MERMAID_CONFIG = {
     "flowchart": {"htmlLabels": False, "curve": "basis", "padding": 8, "nodeSpacing": 22, "rankSpacing": 24,
                   "useMaxWidth": False, "wrappingWidth": 420, "subGraphTitleMargin": {"top": 4, "bottom": 10}},
     "themeVariables": {
-        "fontFamily": "Source Sans, Helvetica, Arial, sans-serif", "fontSize": "20px", "lineColor": "#475569",
-        "clusterBkg": "#F8FAFC", "clusterBorder": "#CBD5E1", "primaryTextColor": "#0F172A",
+        "fontFamily": "Barlow, Helvetica, Arial, sans-serif", "fontSize": "20px", "lineColor": MUTED,
+        "clusterBkg": PAPER, "clusterBorder": LINE, "primaryTextColor": INK,
         "edgeLabelBackground": "#FFFFFF",
     },
 }
 
 
-def source_sans() -> Path:
-    """Source Sans as shipped with Streamlit (the app's font), so no font download is needed."""
-    import streamlit
-    media = Path(streamlit.__file__).parent / "static" / "static" / "media"
-    return next(media.glob("SourceSansVF-Upright*.woff2"))
+FONTS = ROOT / "static" / "fonts"
+# The app's self-hosted fonts: Barlow for text, Zilla Slab for headings
+FONT_FACES = [
+    ("Barlow", "Barlow-400.woff2", 400, "normal"), ("Barlow", "Barlow-400-italic.woff2", 400, "italic"),
+    ("Barlow", "Barlow-600.woff2", 600, "normal"), ("Barlow", "Barlow-700.woff2", 700, "normal"),
+    ("Zilla Slab", "ZillaSlab-BoldItalic.woff2", 700, "italic"),
+]
 
 
 def font_face_css() -> str:
-    return (f"@font-face {{ font-family: 'Source Sans'; src: url('{source_sans().as_uri()}') format('woff2'); "
-            "font-weight: 200 900; }")
+    return "".join(
+        f"@font-face {{ font-family: '{family}'; src: url('{(FONTS / file).as_uri()}') format('woff2'); "
+        f"font-weight: {weight}; font-style: {style}; }}"
+        for family, file, weight, style in FONT_FACES
+    )
 
 
 def ensure_node_modules() -> None:
@@ -92,14 +99,14 @@ def render_diagrams(chrome: Chrome, work: Path) -> None:
     page = work / "mermaid.html"
     page.write_text(
         f"""<!doctype html><html><head><meta charset="utf-8"><style>{font_face_css()}
-        body {{ margin: 0; background: #FFFFFF; font-family: 'Source Sans'; }}
+        body {{ margin: 0; background: #FFFFFF; font-family: 'Barlow'; }}
         #out {{ display: inline-block; padding: 12px; background: #FFFFFF; }}</style>
         <script src="{MERMAID_JS.as_uri()}"></script></head><body><div id="out"></div></body></html>""",
         encoding="utf-8",
     )
     chrome.set_viewport(2400, 2400, SCALE)
     chrome.navigate(page.as_uri(), 1.0)
-    chrome.eval("document.fonts.load('17px \"Source Sans\"').then(() => document.fonts.ready).then(() => true)")
+    chrome.eval("document.fonts.load('17px \"Barlow\"').then(() => document.fonts.ready).then(() => true)")
     chrome.eval(f"mermaid.initialize({json.dumps(MERMAID_CONFIG)}); true")
     for source in sorted(DIAGRAMS.glob("*.mmd")):
         diagram_id = "d_" + re.sub(r"\W", "_", source.stem)
@@ -159,7 +166,11 @@ window.M = {
   root(r) { return r ? (typeof r === 'string' ? document.querySelector(r) : r) : document; },
   q(sel, text, r) {
     const all = [...M.root(r).querySelectorAll(sel)].filter(M.vis);
-    return text == null ? all[0] : all.find(e => (e.innerText || '').trim().includes(text));
+    if (text == null) return all[0];
+    // textContent, case-insensitive: the theme sets some labels in capitals (text-transform).
+    // An element whose whole text is the label wins over one that only contains it.
+    const t = text.toLowerCase(), content = e => (e.textContent || '').trim().toLowerCase();
+    return all.find(e => content(e) === t) || all.find(e => content(e).includes(t));
   },
   qa(sel, r) { return [...M.root(r).querySelectorAll(sel)].filter(M.vis); },
   up(e, sel) { return e && e.closest(sel); },
@@ -285,6 +296,13 @@ class Walk:
             let x1 = Math.max(...rs.map(r => r.right)) + {pad}, y1 = Math.max(...rs.map(r => r.bottom)) + {pad};
             const c = {json.dumps(clamp)} ? document.querySelector({json.dumps(clamp)}).getBoundingClientRect()
                 : {{left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight}};
+            // In a dialog, show its full width (buttons side by side are never cut off)
+            if ({json.dumps(clamp)}) {{ x0 = c.left; x1 = c.right; }}
+            // Never start in the middle of a decoration (step numeral, logo): start below it
+            for (const d of document.querySelectorAll('.hz-step, .st-key-hzbrand')) {{
+              const r = d.getBoundingClientRect();
+              if (r.height && r.top < y0 && r.bottom > y0) y0 = r.bottom + 4;
+            }}
             x0 = Math.max(0, c.left, x0); y0 = Math.max(0, c.top, y0);
             x1 = Math.min(window.innerWidth, c.right, x1); y1 = Math.min(window.innerHeight, c.bottom, y1);
             return {{x: x0, y: y0, width: x1 - x0, height: y1 - y0}}; }})()""")
@@ -333,8 +351,8 @@ class Walk:
             f"M.boxes({dialog})[0]",
             f"M.up(M.q('summary', 'Details', {dialog}), '[data-testid=stExpander]')",
         ], clamp='[role=dialog]')
-        self.scroll_to(f"M.q('p, strong, h3, h4', {json.dumps(ui['decision'])}, {dialog})")
-        self.shot("04_request_decision", [f"M.q('p, strong, h3, h4', {json.dumps(ui['decision'])}, {dialog})",
+        self.scroll_to(f"M.q('p, strong, h3, h4, span', {json.dumps(ui['decision'])}, {dialog})")
+        self.shot("04_request_decision", [f"M.q('p, strong, h3, h4, span', {json.dumps(ui['decision'])}, {dialog})",
                                           f"M.q('button', {json.dumps(ui['approve'])}, {dialog})"], [
             f"M.q('[data-testid=stTextArea]', null, {dialog})",
             f"M.q('button', {json.dumps(ui['approve'])}, {dialog})",
@@ -344,10 +362,10 @@ class Walk:
 
         # VA-2026-0002: the agent recommends rejection; approving would be an override
         self.open_queue_row(1)
-        self.scroll_to(f"M.q('p, strong, h3, h4', {json.dumps(ui['issues'])}, {dialog})")
-        self.shot("05_override", [f"M.q('p, strong, h3, h4', {json.dumps(ui['issues'])}, {dialog})",
+        self.scroll_to(f"M.q('p, strong, h3, h4, span', {json.dumps(ui['issues'])}, {dialog})")
+        self.shot("05_override", [f"M.q('p, strong, h3, h4, span', {json.dumps(ui['issues'])}, {dialog})",
                                   f"M.q('button', {json.dumps(ui['approve'])}, {dialog})"], [
-            f"M.q('p, strong, h3, h4', {json.dumps(ui['issues'])}, {dialog})",
+            f"M.q('p, strong, h3, h4, span', {json.dumps(ui['issues'])}, {dialog})",
             f"M.q('[data-testid=stTextArea]', null, {dialog})",
             f"M.q('button', {json.dumps(ui['approve'])}, {dialog})",
         ], clamp='[role=dialog]')
@@ -355,8 +373,8 @@ class Walk:
 
         # VA-2026-0003: budget transfer suggestion and the pre-filled Deckungsantrag
         self.open_queue_row(2)
-        self.scroll_to(f"M.q('p, strong, h3, h4', {json.dumps(ui['transfer'])}, {dialog})")
-        self.shot("06_transfer", [f"M.q('p, strong, h3, h4', {json.dumps(ui['transfer'])}, {dialog})",
+        self.scroll_to(f"M.q('p, strong, h3, h4, span', {json.dumps(ui['transfer'])}, {dialog})")
+        self.shot("06_transfer", [f"M.q('p, strong, h3, h4, span', {json.dumps(ui['transfer'])}, {dialog})",
                                   f"M.q('[data-testid=stCheckbox]', {json.dumps(ui['transfer_include'])}, {dialog})"], [
             f"M.q('[data-testid=stRadio]', null, {dialog})",
             f"M.q('[data-testid=stDownloadButton]', {json.dumps(ui['pdf'])}, {dialog})",
@@ -393,8 +411,8 @@ class Walk:
 
         # Bid data with the agent's proposals and the breakdown
         self.click(f"M.q('summary', {json.dumps(ui['breakdown'])})", 1.2)
-        self.scroll_to(f"M.q('p, strong', {json.dumps(ui['table'])})", 40)
-        self.shot("09_bid_table", [f"M.q('p, strong', {json.dumps(ui['table'])})",
+        self.scroll_to(f"M.q('p, strong, span', {json.dumps(ui['table'])})", 40)
+        self.shot("09_bid_table", [f"M.q('p, strong, span', {json.dumps(ui['table'])})",
                                    f"M.up(M.q('summary', {json.dumps(ui['breakdown'])}), '[data-testid=stExpander]')"], [
             f"M.q('[data-testid=stCheckbox]', {json.dumps(ui['committee'])})",
             "M.q('[data-testid=stDataFrame]')",
@@ -453,12 +471,14 @@ class Walk:
 
         # Management Insights
         self.button(ui["nav_insights"], "[data-testid=stSidebar]", 2.5)
-        self.shot("15_insights_budget", [f"M.q('[data-testid=stExpander]', {json.dumps(ui['how'])})",
-                                         f"M.box(M.q('h3', {json.dumps(ui['tile_suppliers'])}))"], [
+        # The supplier tile is shown down to its chart (the whole tile does not fit on the page)
+        supplier_chart = (f"M.box(M.q('h3', {json.dumps(ui['tile_suppliers'])}))"
+                          ".querySelector('[data-testid=stVegaLiteChart], .stVegaLiteChart')")
+        self.shot("15_insights_budget", [f"M.q('[data-testid=stExpander]', {json.dumps(ui['how'])})", supplier_chart], [
             f"M.q('[data-testid=stExpander]', {json.dumps(ui['how'])})",
             f"M.box(M.q('h3', {json.dumps(ui['tile_budget'])}))",
-            f"M.box(M.q('h3', {json.dumps(ui['tile_suppliers'])}))",
-        ], max_height=1180)
+            supplier_chart,
+        ], max_height=1260)
         self.scroll_to(f"M.q('h3', {json.dumps(ui['tile_oversight'])})", 30)
         self.shot("16_insights_oversight", [
             f"M.box(M.q('h3', {json.dumps(ui['tile_oversight'])}))"], [
@@ -509,28 +529,29 @@ def take_screenshots(chrome: Chrome) -> None:
 
 PRINT_CSS = """
 @page { size: A4; margin: 17mm 16mm 18mm 16mm; }
-html { font-family: 'Source Sans', 'Helvetica Neue', Arial, sans-serif; font-size: 10.2pt; color: #0F172A; }
+html { font-family: 'Barlow', 'Helvetica Neue', Arial, sans-serif; font-size: 10.4pt; color: #45465A; }
 body { margin: 0; line-height: 1.38; }
-h1, h2, h3 { color: #1E3A8A; line-height: 1.2; break-after: avoid; }
-h1 { font-size: 19pt; margin: 18pt 0 8pt; padding-bottom: 4pt; border-bottom: 2.5pt solid #1E3A8A; }
+h1, h2, h3 { color: #076A89; line-height: 1.2; break-after: avoid; }
+h1, .cover .title { font-family: 'Zilla Slab', Georgia, serif; font-style: italic; font-weight: 700; }
+h1 { font-size: 20pt; margin: 18pt 0 8pt; padding-bottom: 4pt; border-bottom: 2.5pt solid #CC6815; color: #45465A; }
 h1.page, .page-break { break-before: page; }
 h2 { font-size: 13.5pt; margin: 15pt 0 5pt; }
 h3 { font-size: 11.5pt; margin: 11pt 0 4pt; }
 p { margin: 0 0 6pt; }
 ul, ol { margin: 0 0 7pt; padding-left: 17pt; }
 li { margin: 0 0 2.5pt; }
-strong { color: #0F172A; }
-code { font-family: 'Source Sans', monospace; background: #EEF2FF; padding: 0 3pt; border-radius: 3pt; }
-a { color: #1E3A8A; }
+strong { color: #45465A; }
+code { font-family: 'Barlow', monospace; background: #E6F3F7; padding: 0 3pt; border-radius: 3pt; }
+a { color: #076A89; }
 table { border-collapse: collapse; width: 100%; margin: 4pt 0 9pt; font-size: 9.6pt; break-inside: auto; }
-th { background: #1E3A8A; color: #FFFFFF; text-align: left; font-weight: 600; }
-th, td { border: 0.6pt solid #CBD5E1; padding: 3.5pt 5pt; vertical-align: top; }
+th { background: #076A89; color: #FFFFFF; text-align: left; font-weight: 600; }
+th, td { border: 0.6pt solid #E4E2DC; padding: 3.5pt 5pt; vertical-align: top; }
 tr { break-inside: avoid; }
-tr:nth-child(even) td { background: #F8FAFC; }
-blockquote { margin: 6pt 0 9pt; padding: 6pt 9pt; background: #EEF2FF; border-left: 3pt solid #1E3A8A; border-radius: 3pt; }
+tr:nth-child(even) td { background: #F8F7F4; }
+blockquote { margin: 6pt 0 9pt; padding: 6pt 9pt; background: #E6F3F7; border-left: 3pt solid #076A89; border-radius: 3pt; }
 blockquote p:last-child { margin: 0; }
 figure { margin: 6pt 0 11pt; break-inside: avoid; text-align: center; }
-figure img { max-width: 100%; max-height: 72mm; border: 0.6pt solid #CBD5E1; border-radius: 4pt; }
+figure img { max-width: 100%; max-height: 72mm; border: 0.6pt solid #E4E2DC; border-radius: 4pt; }
 figure.tall { float: right; width: 50mm; margin: 2pt 0 6pt 10pt; }
 figure.tall img { max-height: 178mm; }
 /* Diagrams are sized so their text prints at about 8-9 pt */
@@ -540,13 +561,13 @@ figure.diagram.small svg { max-height: 165mm; }
 .row figure { flex: 1 1 0; margin-top: 2pt; }
 .row figure img { max-height: 95mm; }
 .overview figure.diagram svg { max-height: 200mm; }
-figcaption { font-size: 9pt; color: #475569; margin-top: 3pt; font-style: italic; }
+figcaption { font-size: 9pt; color: #6B6C7A; margin-top: 3pt; font-style: italic; }
 .cover { break-after: page; height: 255mm; display: flex; flex-direction: column; justify-content: center; }
-.cover .agency { color: #1E3A8A; font-weight: 700; letter-spacing: 0.08em; font-size: 10pt; text-transform: uppercase; }
-.cover .title { font-size: 34pt; font-weight: 700; color: #0F172A; margin: 10pt 0 4pt; line-height: 1.1; }
-.cover .subtitle { font-size: 15pt; color: #334155; margin-bottom: 26pt; }
-.cover .meta { font-size: 10.5pt; color: #475569; border-top: 1pt solid #CBD5E1; padding-top: 8pt; }
-.cover .note { margin-top: 18pt; background: #FEF3C7; border-left: 3pt solid #D97706; padding: 8pt 10pt; font-size: 10pt; }
+.cover .agency { color: #076A89; font-weight: 700; letter-spacing: 0.08em; font-size: 10pt; text-transform: uppercase; }
+.cover .title { font-size: 34pt; color: #45465A; margin: 10pt 0 4pt; line-height: 1.1; }
+.cover .subtitle { font-size: 15pt; color: #45465A; margin-bottom: 26pt; }
+.cover .meta { font-size: 10.5pt; color: #6B6C7A; border-top: 1pt solid #E4E2DC; padding-top: 8pt; }
+.cover .note { margin-top: 18pt; background: #FBEFE4; border-left: 3pt solid #CC6815; padding: 8pt 10pt; font-size: 10pt; }
 .overview h1 { break-before: page; }
 .keep { break-inside: avoid; }
 """
@@ -559,7 +580,7 @@ PAGE_WORD = {"de": ("Seite", "von"), "en": ("Page", "of")}
 
 
 def embed_diagrams(markdown: str) -> str:
-    """![caption](diagrams/name.svg){.small} -> inline SVG figure (stays vector, uses Source Sans)."""
+    """![caption](diagrams/name.svg){.small} -> inline SVG figure (stays vector, uses Barlow)."""
     def replace(match: re.Match) -> str:
         caption, path, extra = match.group(1), match.group(2), match.group(3) or ""
         svg = (MANUAL / path).read_text(encoding="utf-8")
@@ -594,7 +615,7 @@ def build_pdf(chrome: Chrome, lang: str, work: Path) -> Path:
     chrome.eval("document.fonts.ready.then(() => Promise.all([...document.images].map(i => i.complete ? 1 : "
                 "new Promise(r => { i.onload = i.onerror = r; })))).then(() => true)")
     word, of = PAGE_WORD[lang]
-    style = "font-family: 'Source Sans', Helvetica, Arial, sans-serif; font-size: 8pt; color: #64748B; width: 100%; padding: 0 16mm;"
+    style = "font-family: Barlow, Helvetica, Arial, sans-serif; font-size: 8pt; color: #6B6C7A; width: 100%; padding: 0 16mm;"
     footer = (f'<div style="{style} display: flex; justify-content: space-between;"><span>{FOOTER[lang]}</span>'
               f'<span>{word} <span class="pageNumber"></span> {of} <span class="totalPages"></span></span></div>')
     out = PDF_OUT[lang]
