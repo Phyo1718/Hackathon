@@ -194,8 +194,8 @@ Je Wertung sehen Sie Rang, Bieter, Preis, die endgültigen Punkte je Kriterium u
 </div>
 
 - **So funktioniert der Assistent** (1) zeigt das Ablaufdiagramm von Seite 2.
-- **Budget je Haushaltsposition** (2): gebundene Mittel im Verhältnis zum Gesamtbudget. Das Datum der Ausschöpfung wird mit der Ausgabenrate der letzten 90 Tage hochgerechnet (dafür sind mindestens 2 genehmigte Bestellungen nötig).
-- **Lieferantenanteil** (3): Ein Lieferant mit mehr als 40 % der Ausgaben einer Position wird markiert.
+- **Budget je Haushaltsposition** (2): Das Diagramm zeigt für die gewählte Position die im Haushaltsjahr gebundenen Mittel (durchgezogen), die Prognose bis 31.12. mit der Ausgabenrate der letzten 90 Tage (gestrichelt) und das Gesamtbudget (gepunktet). Die Tabelle nennt „Ausgeschöpft ~Datum“, wenn das Budget noch in diesem Jahr aufgebraucht wird (orange, wenn innerhalb von 60 Tagen), sonst „≈ NN % ausgeschöpft bis 31.12.“. Für eine Prognose sind mindestens 2 genehmigte Bestellungen in 90 Tagen nötig.
+- **Lieferantenanteil** (3): Balken je Lieferant über alle Positionen. Orange markiert wird ein Lieferant mit mehr als 40 % einer Position, wenn die Position mindestens 10.000 € genehmigte Ausgaben und 3 Bestellungen hat, und es mehrere Lieferanten oder mindestens 3 Bestellungen dieses Lieferanten gibt. Kleinere Positionen erhalten nur den Hinweis „zu wenig Daten für eine Konzentrationsprüfung“.
 
 
 **Aufsicht über den Agenten:** die **Übereinstimmung** (1) zwischen Empfehlung und Entscheidung (nur Empfehlungen „Genehmigen“ und „Ablehnen“), die **Abweichungen** (2) mit Vermerk, die an die Sachbearbeitung übergebenen Fälle, die Budgetverschiebungen (vorgeschlagen / angenommen) und die von der Kommission **geänderten Bieterpunkte** (3).
