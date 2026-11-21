@@ -400,6 +400,14 @@ section[role="dialog"] h2 { font-size: clamp(1.4rem, 4vw, 2rem); color: var(--hz
 :is([data-testid="stBaseButton-primary"], [data-testid="stBaseLinkButton-primary"]):hover:not(:disabled):not([disabled]) {
   background-color: #055A74; border-color: #055A74; color: #FFFFFF;
 }
+/* Filled buttons always have white text and icons. st.link_button renders a link (a tag), so the global
+   link colour (.stApp a) would otherwise win: blue text on a blue button. White on #076A89 is
+   6.1:1, on the hover #055A74 7.7:1. Disabled buttons keep their grey (rule below, also !important). */
+.stApp :is([data-testid="stBaseButton-primary"], [data-testid="stBaseLinkButton-primary"]):not(:disabled):not([disabled]):not([aria-disabled="true"]),
+.stApp :is([data-testid="stBaseButton-primary"], [data-testid="stBaseLinkButton-primary"]):not(:disabled):not([disabled]):not([aria-disabled="true"]):is(:link, :visited, :hover, :focus, :focus-visible, :active),
+.stApp :is([data-testid="stBaseButton-primary"], [data-testid="stBaseLinkButton-primary"]):not(:disabled):not([disabled]):not([aria-disabled="true"]) :is(p, span, [data-testid="stIconMaterial"]) {
+  color: #FFFFFF !important;
+}
 :is([data-testid="stBaseButton-secondary"], [data-testid="stBaseLinkButton-secondary"]) {
   background-color: var(--hz-surface); border: 1px solid var(--hz-line); color: var(--hz-text);
 }

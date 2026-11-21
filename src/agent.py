@@ -9,6 +9,7 @@ from google import genai
 from google.genai import types
 from fpdf import FPDF
 
+from src.bid_scoring import same_supplier
 from src.init_db import get_db_path
 
 load_dotenv()
@@ -76,6 +77,9 @@ def check_supplier(supplier_name: str) -> Dict[str, Any]:
             if s_name in clean_input or clean_input in s_name:
                 row = s
                 break
+        # 3. Spelling variants: "Office Depot" / "OfficeDepot Deutschland GmbH"
+        if not row:
+            row = next((s for s in all_suppliers if same_supplier(s["Name"], supplier_name)), None)
                 
     conn.close()
     

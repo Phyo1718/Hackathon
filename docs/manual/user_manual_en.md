@@ -12,7 +12,7 @@
 
 The assistant supports the City of Hildesheim's central procurement office with two routine tasks: **checking procurement requests** and **evaluating bids**. The agent (AI) prepares and checks. **A human always decides.**
 
-![End-to-end flow: the agent checks and prepares (light blue), people decide (navy), documents are produced at the end of each step (grey).](diagrams/1_overview_en.svg)
+![End-to-end flow: the agent checks and prepares (light blue), people decide (dark blue), documents are produced at the end of each step (beige).](diagrams/1_overview_en.svg)
 
 </section>
 
@@ -54,20 +54,20 @@ The table (1) lists all requests that still need a decision, with the agent's as
 
 ![Request VA-2026-0001: agent recommendation (1), checks (2), details (3).](img/03_request_checks_en.png)
 
-- **Agent recommendation (1):** at the top, in colour, with a one-sentence reason: ✅ Approve, ⚠️ Review required or ❌ Reject. If the amount is at most 5 % above the available budget, the recommendation is "Review required".
+- **Agent recommendation (1):** at the top, in a coloured box with a one-sentence reason: Approve (green), Review required (orange) or Reject (red). The status label above it repeats the assessment, e.g. COMPLIANT. If the amount is at most 5 % above the available budget, the recommendation is "Review required".
 - **Checks (2):** one line per check: ✓ passed, ⚠ needs attention, ✗ failed, ℹ information only.
   - **Supplier:** approved or not.
   - **Budget:** requested, available, and what is left afterwards.
   - **Form:** new award or contract extension.
   - **Accessibility:** staff with special needs and a matching hint. The hint is also printed in the Anmeldebogen under "Sonstige Hinweise".
 - **Details (3):** the extracted data (supplier, amount, budget line and account, form, staff) and the agent's full reasoning, step by step.
-- Above them is the full request text.
+- Between the checks and the details is the full request text.
 
 ## 3.3 Decide: approve or reject
 
 ![Decision: caseworker note (1), Approve & Commit to Budget (2), Reject (3).](img/04_request_decision_en.png)
 
-Both buttons are always there. The one that matches the recommendation is highlighted in navy.
+Both buttons are always there. The one that matches the recommendation is filled in blue.
 
 1. Optionally write a **caseworker note** (1).
 2. **Approve & Commit to Budget** (2): the amount is deducted from the budget line, the decision is logged and the **Anmeldebogen** (PDF) downloads automatically.
@@ -77,7 +77,7 @@ Both buttons are always there. The one that matches the recommendation is highli
 
 ![Request with an open issue (1): approving anyway needs a note (2); only then can you approve (3).](img/05_override_en.png)
 
-Under **Open issues** (1) the agent explains why it recommends rejection, for example "Supplier TechCorp is not approved". If you decide against the recommendation, a yellow notice appears. The button (3) stays disabled until the **caseworker note** (2) contains a justification of **at least 15 characters**. The override is flagged in the history and counted in AI oversight. For "Review required" the note is optional.
+Under **Open issues** (1) the agent explains why it recommends rejection, for example "Supplier TechCorp is not approved". If you decide against the recommendation, an orange notice appears. The button (3) stays disabled until the **caseworker note** (2) contains a justification of **at least 15 characters**. The override is flagged in the history and counted in AI oversight. For "Review required" the note is optional.
 
 ## 3.5 Budget transfer and Deckungsantrag
 
@@ -120,8 +120,8 @@ The table (2) shows **Bidder, Price (EUR), References / Service (0-10) and Conce
 
 | Evidence | Points |
 |---|---|
-| Previous contract with the city on the same budget line | +4 |
-| Approved supplier, but no previous contract | +2 |
+| Previous approved order from the city (any budget line) | +4 |
+| Approved supplier, but no previous order | +2 |
 | References named in the bid: 2 or more / 1 | +3 / +2 |
 | Warranty 3 years or on-site service / 2 years / 1 year | +3 / +2 / +1 |
 
@@ -198,8 +198,8 @@ Each evaluation lists rank, bidder, price, the final score per criterion and the
 </div>
 
 - **How it works** (1) shows the flow diagram from page 2.
-- **Budget per line** (2): for the selected line, the chart shows the funds committed this budget year (solid), the projection to 31 Dec at the 90-day rate (dashed) and the budget total (dotted). The table shows "Runs out ~date" if the budget is used up this year (amber within 60 days), otherwise "≈ NN % used by 31.12.". A projection needs at least 2 approved orders in 90 days.
-- **Supplier share** (3): one bar per supplier across all lines. A supplier is flagged in amber if it has more than 40 % of a line, the line has at least EUR 10,000 approved spend and 3 orders, and there are several suppliers or at least 3 orders from that supplier. Smaller lines only get the note "too little data for a concentration check".
+- **Budget per line** (2): for the selected line, the chart shows the funds committed this budget year (solid), the projection to 31 Dec at the 90-day rate (dashed) and the budget total (dotted). The table shows "Runs out ~date" if the budget is used up this year (orange within 60 days), otherwise "≈ NN % used by 31.12.". A projection needs at least 2 approved orders in 90 days.
+- **Supplier share** (3): one bar per supplier across all lines. A supplier is flagged in orange if it has more than 40 % of a line, the line has at least EUR 10,000 approved spend and 3 orders, and there are several suppliers or at least 3 orders from that supplier. Smaller lines only get the note "too little data for a concentration check".
 
 
 **AI oversight** shows:
@@ -231,14 +231,14 @@ For each budget line, a bar shows how much is already committed. On the right is
 **Why is a button disabled?**
 
 - *Approve or Reject:* you are deciding against the recommendation and the note has fewer than 15 characters.
-- *Run Evaluation:* the committee confirmation is missing, a cell shows "required", or the weights do not total 100 %. The yellow box gives the reason.
+- *Run Evaluation:* the committee confirmation is missing, a cell shows "required", or the weights do not total 100 %. The orange box gives the reason.
 - *✉ Email:* the award has not been approved yet (there's a hint under the checkbox), or the email address is missing.
 
 **An email address is missing.** The address is read from the bid PDF, otherwise from the supplier table. If neither has one, "Email address missing" and an input field appear in the bidder's row.
 
 **A PDF was not read correctly.** Scanned PDFs without text cannot be read. Check the source text under "Agent scoring breakdown" and correct the bidder or price directly in the table. If the bidder name was taken from the file name, a notice appears.
 
-**The evaluation is blocked.** The yellow box lists what is missing per bidder, for example "References / Service – no track record and none named in bid". Enter only those values.
+**The evaluation is blocked.** The orange box lists what is missing per bidder, for example "References / Service – no track record and none named in bid". Enter only those values.
 
 **No request in the Bid Evaluation list.** Only approved requests without an evaluation are offered. Approve a request first, or choose "Other tender (no request)".
 

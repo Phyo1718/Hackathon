@@ -333,7 +333,7 @@ class TestStreamlitApp(IsolatedTestCase):
         self.assertEqual(row["references_score"], 7)
         self.assertEqual(row["concept_score"], 8)
         breakdown = " ".join(m.value for e in at.expander for m in e.markdown)
-        self.assertIn("+4 früherer Auftrag VA-2026-H06 (+1 weitere) · +3 Garantie 3 Jahre · Referenzen: keine im Angebot", breakdown)
+        self.assertIn("+4 früherer Auftrag VA-2026-H06 (IT-Ausstattung, +1 weitere) · +3 Garantie 3 Jahre · Referenzen: keine im Angebot", breakdown)
         self.assertIn("Angebot: 15 HP EliteBook Laptops (3 years warranty) · Menge 15", breakdown)
         self.assertIn("Fundstellen in der PDF: Bechtle_bid.pdf: Supplier: Bechtle GmbH", breakdown)
         self.assertIn("Total Price: EUR 15200.00", breakdown)
@@ -380,9 +380,10 @@ class TestStreamlitApp(IsolatedTestCase):
         self.upload_bids(at, *BID_FIXTURES)
         table = at.data_editor[0].value.set_index("bidder")
         self.assertEqual(table["references_score"].to_dict(),
-                         {"Bechtle GmbH": 7, "Dell Technologies": 5, "OfficeDepot Deutschland GmbH": 2})
+                         {"Bechtle GmbH": 7, "Dell Technologies": 5, "OfficeDepot Deutschland GmbH": 6})
         breakdown = " ".join(m.value for e in at.expander for m in e.markdown)
-        self.assertIn("kein Auftrag in IT-Ausstattung (zugelassen nur für Büromaterial) · Referenzen: keine im Angebot", breakdown)
+        # OfficeDepot's approved Büromaterial order counts as a previous order for the IT request
+        self.assertIn("+4 früherer Auftrag VA-2026-H03 (Büromaterial) · +2 Garantie 2 Jahre · Referenzen: keine im Angebot", breakdown)
 
         # The committee lowers Dell's References / Service from 5 to 4
         edits = at.session_state["bid_edits"]

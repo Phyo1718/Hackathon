@@ -3,20 +3,25 @@ import unittest
 from helpers import PROJECT_ROOT  # noqa: F401  (adds the project root to sys.path)
 from src.agent import calculate_price_score, score_criterion
 from src.bid_parser import parse_bid_text
-from src.bid_scoring import RUBRIC, explain, item_quantity, item_types, score_bid
+from datetime import datetime
+
+from src.bid_scoring import (RUBRIC, explain, item_quantity, item_types, previous_orders, same_supplier,
+                             score_bid)
 
 REQUEST = {"ref": "VA-2026-0001", "category": "IT-Ausstattung",
            "text": "15 Dell Laptops für das digitale Verwaltungsteam"}
+# Approved orders (previous_orders); rejected requests never appear here
 HISTORY = [
-    {"ref": "VA-2026-H06", "supplier": "Bechtle GmbH", "category": "IT-Ausstattung",
-     "decision": "APPROVED", "decided_at": "2026-10-20T10:00:00"},
-    {"ref": "VA-2026-H05", "supplier": "TechCorp", "category": "IT-Ausstattung",
-     "decision": "REJECTED", "decided_at": "2026-09-20T10:00:00"},
+    {"ref": "VA-2026-H06", "supplier": "Bechtle GmbH", "category": "IT-Ausstattung", "date": "2026-10-20T10:00:00"},
+    {"ref": "VA-2026-H03", "supplier": "OfficeDepot Deutschland", "category": "Büromaterial",
+     "date": "2026-10-02T10:00:00"},
 ]
 SUPPLIERS = {
     "bechtle gmbh": {"supplier_name": "Bechtle GmbH", "exists": True, "is_approved": True, "category": "IT-Ausstattung"},
     "dell technologies": {"supplier_name": "Dell Technologies", "exists": True, "is_approved": True, "category": "IT-Ausstattung"},
     "techcorp": {"supplier_name": "TechCorp", "exists": True, "is_approved": False, "category": "IT-Ausstattung"},
+    "officedepot deutschland gmbh": {"supplier_name": "OfficeDepot Deutschland", "exists": True, "is_approved": True,
+                                     "category": "Büromaterial"},
 }
 
 
@@ -41,7 +46,7 @@ class TestScoreBid(unittest.TestCase):
         self.assertEqual(result["concept"]["score"], 10)
         self.assertEqual(
             explain(result["references"], "EN"),
-            "+4 previous contract VA-2026-H06 · +3 2 references in bid · +3 warranty 3 years",
+            "+4 previous order VA-2026-H06 (IT-Ausstattung) · +3 2 references in bid · +3 warranty 3 years",
         )
         self.assertEqual(
             explain(result["concept"], "EN"),
@@ -80,9 +85,41 @@ class TestScoreBid(unittest.TestCase):
         self.assertEqual(track("Dell Technologies")["points"], 2)
         self.assertEqual(track("Unbekannt Handel GmbH")["points"], 0)
         self.assertEqual(track("TechCorp")["reason"]["EN"], "listed as not approved")
-        # The tender itself is no previous contract, nor is a contract in another category
+        # The tender itself is no previous order
         self.assertEqual(track("Bechtle GmbH", request={**REQUEST, "ref": "VA-2026-H06"})["points"], 2)
-        self.assertEqual(track("Bechtle GmbH", request={**REQUEST, "category": "Büromaterial"})["points"], 0)
+
+    def test_previous_order_in_any_budget_line_counts(self):
+        # OfficeDepot's approved Büromaterial order counts for the IT laptop request, under any spelling
+        for name in ("OfficeDepot Deutschland GmbH", "Office Depot", "OfficeDepot"):
+            references = score_bid(bid(bidder=name), REQUEST, supplier_db, HISTORY)["references"]
+            self.assertEqual(references["score"], RUBRIC["references"]["track_record"]["contract"], name)
+            self.assertEqual(explain(references, "EN"),
+                             "+4 previous order VA-2026-H03 (Büromaterial) · references: none in bid · warranty: not stated")
+
+    def test_supplier_without_orders_stays_required(self):
+        # Unknown supplier without any order, references or warranty: no evidence -> "required"
+        result = score_bid(bid(bidder="Neu Handel GmbH"), REQUEST, supplier_db, HISTORY)
+        self.assertIsNone(result["references"]["score"])
+        # An order of a different supplier does not count, even with a similar-looking name
+        self.assertFalse(same_supplier("Dell Technologies", "Bechtle GmbH"))
+        self.assertTrue(same_supplier("Bechtle AG", "Bechtle GmbH"))
+        self.assertFalse(same_supplier("SE", "Cancom SE"))
+
+    def test_previous_orders_take_reference_from_request_history(self):
+        approvals = [
+            {"timestamp": datetime(2026, 10, 2, 9), "category": "Büromaterial", "supplier": "OfficeDepot Deutschland",
+             "amount": 3450.0},
+            {"timestamp": datetime(2026, 11, 1, 9), "category": "IT-Ausstattung", "supplier": "Cancom SE", "amount": 99.0},
+        ]
+        requests = [
+            {"ref": "VA-2026-H03", "supplier": "OfficeDepot Deutschland", "category": "Büromaterial", "amount": 3450.0,
+             "decision": "APPROVED", "decided_at": "2026-10-02T09:00:01"},
+            {"ref": "VA-2026-H08", "supplier": "OfficeDepot Deutschland", "category": "Büromaterial", "amount": 4200.0,
+             "decision": "REJECTED", "decided_at": "2026-11-01T09:00:00"},
+        ]
+        orders = previous_orders(approvals, requests)
+        self.assertEqual([o["ref"] for o in orders], ["VA-2026-H03", "01.11.2026"])
+        self.assertEqual(orders[0]["category"], "Büromaterial")
 
     def test_warranty_and_delivery_bands(self):
         def points(**facts):

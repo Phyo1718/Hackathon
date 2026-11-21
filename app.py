@@ -54,7 +54,7 @@ from src.agent import (  # noqa: E402
 from src.bid_parser import BidExtractionError, parse_bid_pdf
 from src.checklist import STATUS_ICONS, verification_view
 from src.help_chat import HelpUnavailable, ask, chat_enabled
-from src.bid_scoring import explain, score_bid
+from src.bid_scoring import explain, previous_orders, score_bid
 from src.letters import (
     build_letters,
     email_body,
@@ -2449,8 +2449,10 @@ elif current_view == "bids":
                 ) if value
             ),
         }
+        # Track record: the approved orders Management Insights counts, with their request reference
+        orders = previous_orders(get_approved_spending(), history()["requests"])
         proposals = {
-            file_key: score_bid(extractions[file_key]["bid"], score_request, check_supplier, history()["requests"])
+            file_key: score_bid(extractions[file_key]["bid"], score_request, check_supplier, orders)
             for file_key in row_keys
         }
         lang = st.session_state["lang"]

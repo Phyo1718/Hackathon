@@ -12,7 +12,7 @@
 
 Der Assistent unterstützt die Zentrale Vergabestelle bei zwei Routineaufgaben: der **Prüfung von Beschaffungsanträgen** und der **Wertung von Angeboten**. Der Agent (KI) bereitet vor und prüft. **Entscheidungen trifft immer ein Mensch.**
 
-![Gesamtablauf: Der Agent prüft und bereitet vor (hellblau), Menschen entscheiden (dunkelblau), Dokumente entstehen am Ende jedes Schritts (grau).](diagrams/1_overview_de.svg)
+![Gesamtablauf: Der Agent prüft und bereitet vor (hellblau), Menschen entscheiden (dunkelblau), Dokumente entstehen am Ende jedes Schritts (beige).](diagrams/1_overview_de.svg)
 
 </section>
 
@@ -54,20 +54,20 @@ Die Tabelle (1) zeigt alle Anträge, die noch entschieden werden müssen, mit de
 
 ![Antrag VA-2026-0001: Empfehlung des Agenten (1), Prüfungen (2), Details (3).](img/03_request_checks_de.png)
 
-- **Empfehlung des Agenten (1):** oben, farbig, mit einem Satz Begründung: ✅ Genehmigen, ⚠️ Prüfung erforderlich oder ❌ Ablehnen. Liegt der Betrag höchstens 5 % über dem verfügbaren Budget, lautet die Empfehlung „Prüfung erforderlich“.
+- **Empfehlung des Agenten (1):** oben in einem farbigen Kasten mit einem Satz Begründung: Genehmigen (grün), Prüfung erforderlich (orange) oder Ablehnen (rot). Die Statusmarke darüber wiederholt die Einschätzung, z. B. REGELKONFORM. Liegt der Betrag höchstens 5 % über dem verfügbaren Budget, lautet die Empfehlung „Prüfung erforderlich“.
 - **Prüfungen (2):** eine Zeile je Prüfung: ✓ bestanden, ⚠ Aufmerksamkeit nötig, ✗ nicht bestanden, ℹ nur zur Information.
   - **Lieferant:** zugelassen oder nicht.
   - **Budget:** beantragt, frei und danach verfügbar.
   - **Formular:** Neuvergabe oder Auftragserweiterung.
   - **Barrierefreiheit:** Beschäftigte mit besonderen Bedürfnissen und ein passender Hinweis. Der Hinweis steht auch im Anmeldebogen unter „Sonstige Hinweise“.
 - **Details (3):** ausgelesene Daten (Lieferant, Betrag, Haushaltsposition mit Konto, Formular, Beschäftigte) und die vollständige Begründung des Agenten Schritt für Schritt.
-- Darüber steht der vollständige Antragstext.
+- Zwischen den Prüfungen und den Details steht der vollständige Antragstext.
 
 ## 3.3 Entscheiden: Genehmigen oder Ablehnen
 
 ![Entscheidung: Vermerk (1), Genehmigen und Budget belasten (2), Ablehnen (3).](img/04_request_decision_de.png)
 
-Es gibt immer beide Schaltflächen. Die Schaltfläche, die der Empfehlung entspricht, ist dunkelblau hervorgehoben.
+Es gibt immer beide Schaltflächen. Die Schaltfläche, die der Empfehlung entspricht, ist blau gefüllt.
 
 1. Optional einen **Vermerk** (1) schreiben.
 2. **Genehmigen und Budget belasten** (2): Der Betrag wird von der Haushaltsposition abgezogen, die Entscheidung wird protokolliert und der **Anmeldebogen** (PDF) wird automatisch heruntergeladen.
@@ -77,7 +77,7 @@ Es gibt immer beide Schaltflächen. Die Schaltfläche, die der Empfehlung entspr
 
 ![Antrag mit offenem Punkt (1): Wer trotzdem genehmigt, braucht einen Vermerk (2); erst dann ist Genehmigen (3) möglich.](img/05_override_de.png)
 
-Unter **Offene Punkte** (1) nennt der Agent, warum er ablehnt, zum Beispiel „Lieferant TechCorp ist nicht zugelassen.“. Wer gegen die Empfehlung entscheidet, sieht einen gelben Hinweis. Die Schaltfläche (3) bleibt gesperrt, bis im **Vermerk** (2) eine Begründung mit **mindestens 15 Zeichen** steht. Die Abweichung wird im Verlauf markiert und in der Aufsicht über den Agenten gezählt. Bei „Prüfung erforderlich“ ist der Vermerk freiwillig.
+Unter **Offene Punkte** (1) nennt der Agent, warum er ablehnt, zum Beispiel „Lieferant TechCorp ist nicht zugelassen.“. Wer gegen die Empfehlung entscheidet, sieht einen orangefarbenen Hinweis. Die Schaltfläche (3) bleibt gesperrt, bis im **Vermerk** (2) eine Begründung mit **mindestens 15 Zeichen** steht. Die Abweichung wird im Verlauf markiert und in der Aufsicht über den Agenten gezählt. Bei „Prüfung erforderlich“ ist der Vermerk freiwillig.
 
 ## 3.5 Budgetverschiebung und Deckungsantrag
 
@@ -120,7 +120,7 @@ Die Tabelle (2) zeigt **Bieter, Preis (EUR), Referenzen / Service (0-10) und Kon
 
 | Merkmal | Punkte |
 |---|---|
-| Früherer Auftrag der Stadt in derselben Haushaltsposition | +4 |
+| Früherer genehmigter Auftrag der Stadt (beliebige Haushaltsposition) | +4 |
 | Zugelassener Lieferant, aber kein früherer Auftrag | +2 |
 | Im Angebot genannte Referenzen: 2 oder mehr / 1 | +3 / +2 |
 | Garantie 3 Jahre oder Vor-Ort-Service / 2 Jahre / 1 Jahr | +3 / +2 / +1 |
@@ -226,14 +226,14 @@ Für jede Haushaltsposition zeigt ein Balken, wie viel bereits gebunden ist. Rec
 **Warum ist eine Schaltfläche grau?**
 
 - *Genehmigen oder Ablehnen:* Sie entscheiden gegen die Empfehlung, und der Vermerk hat weniger als 15 Zeichen.
-- *Wertung starten:* Die Bestätigung der Kommission fehlt, eine Zelle zeigt „erforderlich“, oder die Gewichte ergeben nicht 100 %. Der gelbe Kasten nennt den Grund.
+- *Wertung starten:* Die Bestätigung der Kommission fehlt, eine Zelle zeigt „erforderlich“, oder die Gewichte ergeben nicht 100 %. Der orangefarbene Kasten nennt den Grund.
 - *✉ E-Mail:* Der Zuschlag ist noch nicht freigegeben (Hinweis unter der Checkbox), oder die E-Mail-Adresse fehlt.
 
 **E-Mail-Adresse fehlt.** Die Adresse wird aus der Angebots-PDF gelesen, sonst aus der Lieferantentabelle. Fehlt sie in beiden, erscheint „E-Mail-Adresse fehlt“ mit einem Eingabefeld in der Zeile des Bieters.
 
 **Die PDF wurde nicht richtig gelesen.** Gescannte PDFs ohne Text können nicht gelesen werden. Prüfen Sie die Fundstellen unter „Punktevorschlag des Agenten“ und korrigieren Sie Bieter oder Preis direkt in der Tabelle. Stammt der Bietername aus dem Dateinamen, erscheint ein Hinweis.
 
-**Die Wertung ist gesperrt.** Der gelbe Kasten listet je Bieter, was fehlt, zum Beispiel „Referenzen / Service – keine Zusammenarbeit bekannt und keine Referenzen im Angebot“. Tragen Sie nur diese Werte ein.
+**Die Wertung ist gesperrt.** Der orangefarbene Kasten listet je Bieter, was fehlt, zum Beispiel „Referenzen / Service – keine Zusammenarbeit bekannt und keine Referenzen im Angebot“. Tragen Sie nur diese Werte ein.
 
 **Kein Antrag in der Auswahl der Angebotswertung.** Es werden nur genehmigte Anträge ohne Wertung angeboten. Genehmigen Sie zuerst einen Antrag oder wählen Sie „Sonstige Ausschreibung (ohne Antrag)“.
 
