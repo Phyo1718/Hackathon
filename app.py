@@ -63,6 +63,7 @@ from src.letters import (
     mailto_url,
     stored_letter,
 )
+from src import ui_theme as ui  # noqa: E402  (presentation only: CSS, colours, decorative SVG)
 from src.demo_seed import HISTORICAL_REQUESTS, SEED_REQUESTS, SEED_TENDER
 from src.init_db import get_db_path, init_db
 from src.insights import (
@@ -793,6 +794,8 @@ SAMPLE_REQUESTS = {
 }
 
 VIEWS = ["verify", "bids", "add", "insights"]
+# Decorative button icons for the sample requests (Material Symbols)
+SAMPLE_ICONS = {"valid": ":material/computer:", "unapproved": ":material/block:", "review": ":material/local_shipping:"}
 
 # ==============================================================================
 # DATABASE ADAPTER FUNCTIONS
@@ -834,177 +837,24 @@ st.set_page_config(
     layout="wide",
 )
 
+# Theme: fonts, colours, components and motion (src/ui_theme.py). Injected before the startup gate,
+# so the setup screen is styled too.
+st.html(ui.css(VIEWS))
+
 # Startup gate: the agent cannot produce any decision without Gemini, so nothing
 # else is rendered until an API key is configured.
 if not has_api_key():
-    st.error(
-        "**Gemini API key missing / Gemini-API-Schlüssel fehlt.**\n\n"
-        "This application requires Google Gemini and has no offline mode. To set it up:\n\n"
-        "1. Copy `.env.example` to `.env` in the project root.\n"
-        "2. Set `GEMINI_API_KEY=<your key>` in `.env` (or export `GEMINI_API_KEY` / `GOOGLE_API_KEY`).\n"
-        "3. Restart the app with `streamlit run app.py`."
-    )
+    with st.container(key="hzgate"):
+        st.html(ui.illustration("key", "blue", "lg"))
+        st.error(
+            "**Gemini API key missing / Gemini-API-Schlüssel fehlt.**\n\n"
+            "This application requires Google Gemini and has no offline mode. To set it up:\n\n"
+            "1. Copy `.env.example` to `.env` in the project root.\n"
+            "2. Set `GEMINI_API_KEY=<your key>` in `.env` (or export `GEMINI_API_KEY` / `GOOGLE_API_KEY`).\n"
+            "3. Restart the app with `streamlit run app.py`.",
+            icon=":material/key:",
+        )
     st.stop()
-
-st.markdown(
-    """
-    <style>
-        /* Clean white enterprise theme */
-        .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stMain"] {
-            background-color: #FFFFFF;
-            color: #0F172A;
-        }
-        [data-testid="stSidebar"] {
-            background-color: #F8FAFC;
-            border-right: 1px solid #E2E8F0;
-        }
-        h1, h2, h3, h4 {
-            color: #0F172A;
-            letter-spacing: 0.01em;
-        }
-        .gov-meta {
-            color: #1E3A8A;
-            font-size: 0.72rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-bottom: 0.25rem;
-        }
-        div.stButton > button {
-            border-radius: 4px;
-            font-weight: 600;
-        }
-
-        /* Sidebar navigation: full-width list items, active item highlighted */
-        .st-key-sidebar_nav div.stButton > button {
-            justify-content: flex-start;
-            text-align: left;
-            border: none;
-            border-left: 3px solid transparent;
-            border-radius: 6px;
-            background-color: transparent;
-            color: #334155;
-            font-weight: 500;
-            box-shadow: none;
-            padding: 0.5rem 0.75rem;
-        }
-        .st-key-sidebar_nav div.stButton > button * {
-            text-align: left;
-            justify-content: flex-start;
-        }
-        .st-key-sidebar_nav div.stButton > button:hover {
-            background-color: #EEF2F7;
-            color: #0F172A;
-        }
-        .st-key-sidebar_nav div.stButton > button[kind="primary"],
-        .st-key-sidebar_nav div.stButton > button[data-testid="stBaseButton-primary"] {
-            background-color: #E0E7FF;
-            border-left-color: #1E3A8A;
-            color: #1E3A8A;
-            font-weight: 700;
-        }
-
-        /* Base64 PDF link rendered as a secondary button */
-        a.pdf-download {
-            display: block;
-            text-align: center;
-            padding: 0.5rem 0.75rem;
-            border: 1px solid #1E3A8A;
-            border-radius: 4px;
-            color: #1E3A8A;
-            font-weight: 600;
-            text-decoration: none;
-        }
-        a.pdf-download:hover {
-            background-color: #E0E7FF;
-        }
-
-        /* Sidebar budget meters: one block per position, each bar scaled to its own total */
-        .budget-total {
-            font-size: 0.8rem;
-            color: #334155;
-            margin: 0 0 0.75rem;
-        }
-        .budget-meter {
-            margin: 0 0 0.9rem;
-        }
-        .budget-meter-head, .budget-meter-caption {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            gap: 0.5rem;
-        }
-        .budget-meter-head {
-            font-size: 0.85rem;
-            margin-bottom: 0.3rem;
-        }
-        .budget-meter-name {
-            font-weight: 700;
-            color: #0F172A;
-            min-width: 0;
-            overflow-wrap: anywhere;
-        }
-        .budget-meter-left {
-            color: #334155;
-            white-space: nowrap;
-        }
-        .budget-meter-left.over {
-            color: #B91C1C;
-            font-weight: 600;
-        }
-        .budget-meter-track {
-            height: 8px;
-            border-radius: 4px;
-            background-color: #E2E8F0;
-            overflow: hidden;
-        }
-        .budget-meter-fill {
-            height: 100%;
-            border-radius: 4px;
-        }
-        .budget-meter-caption {
-            font-size: 0.75rem;
-            color: #64748B;
-            margin-top: 0.25rem;
-        }
-
-        /* Sidebar toggle: a hamburger icon (Material "menu") in both states, at the same spot,
-           always visible. Streamlit's own buttons and toggle behaviour are kept; only the icon
-           (a Material Symbols ligature) is swapped. */
-        [data-testid="stSidebarCollapseButton"] {
-            visibility: visible !important;
-            opacity: 1 !important;
-            order: -1;  /* left end of the sidebar header, where the expand button sits when collapsed */
-            position: relative;
-            left: -11px;  /* same x as the expand button (19px), so the icon does not jump; no layout effect */
-        }
-        [data-testid="stSidebarCollapseButton"] button,
-        button[data-testid="stExpandSidebarButton"] {
-            border-radius: 0.5rem;
-            transition: background-color 0.15s ease;
-        }
-        [data-testid="stSidebarCollapseButton"] button:hover,
-        button[data-testid="stExpandSidebarButton"]:hover {
-            background-color: rgba(30, 58, 138, 0.08);
-        }
-        [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"],
-        [data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] {
-            font-size: 0 !important;
-        }
-        [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"]::after,
-        [data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"]::after {
-            content: "menu";
-            font-family: "Material Symbols Rounded";
-            font-size: 24px;
-            line-height: 1;
-            color: #1E3A8A;
-            display: inline-block;
-            vertical-align: middle;
-        }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
 
 # Initialize session state
 if "lang" not in st.session_state:
@@ -1145,7 +995,7 @@ def submit_request(text: str, source: str) -> Optional[str]:
         evaluation = evaluate_request(text)
     except Exception as e:
         # No fallback: without a Gemini extraction there is no decision.
-        st.error(t("eval_error").format(error=e))
+        st.error(t("eval_error").format(error=e), icon=":material/error:")
         return None
 
     ref = next_request_ref()
@@ -1514,7 +1364,7 @@ def render_issues_and_transfer(item: Dict[str, Any]) -> Optional[Dict[str, Any]]
     elif budget_short:
         issues.append(t("issue_budget_short").format(line=category, shortfall=fmt_eur(shortfall)))
     if issues:
-        st.markdown(f"**{t('issues_header')}**")
+        st.markdown(ui.label("report", t("issues_header")), unsafe_allow_html=True)
         st.markdown("\n".join(f"- {issue}" for issue in issues))
     if not budget_short:
         return None
@@ -1525,10 +1375,10 @@ def render_issues_and_transfer(item: Dict[str, Any]) -> Optional[Dict[str, Any]]
 
     options = suggest_budget_transfers(category, shortfall)
     with st.container(border=True):
-        st.markdown(f"**{t('transfer_header')}**")
+        st.markdown(ui.label("swap_horiz", t("transfer_header")), unsafe_allow_html=True)
         st.caption(t("transfer_intro").format(line=category, shortfall=fmt_eur(shortfall)))
         if not options:
-            st.info(t("transfer_none"))
+            st.info(t("transfer_none"), icon=":material/info:")
             return None
         record_transfer_proposal(ref, options)
 
@@ -1568,6 +1418,7 @@ def render_issues_and_transfer(item: Dict[str, Any]) -> Optional[Dict[str, Any]]
             key=f"transfer_pdf_{ref}",
             on_click="ignore",
             width="stretch",
+            icon=":material/picture_as_pdf:",
         )
         include = st.checkbox(t("transfer_include").format(donor=donor["category"]), key=f"transfer_include_{ref}")
     if not include:
@@ -1601,14 +1452,16 @@ def render_caseworker_decision(item: Dict[str, Any], transfer: Optional[Dict[str
     approve_is_override = recommendation == "REJECTED" and not resolved_by_transfer
     reject_is_override = recommendation == "APPROVED"
 
-    st.markdown(f"**{t('approval_header')}**")
+    st.markdown(ui.label("gavel", t("approval_header")), unsafe_allow_html=True)
     st.caption(t("approval_note"))
     note = st.text_area(t("caseworker_note_label"), key=f"caseworker_note_{ref}", help=t("caseworker_note_help"))
     note_ok = len("".join((note or "").split())) >= 15
     if approve_is_override:
-        st.warning(t("override_warning").format(action=t("commit_approve_btn"), recommendation=t("rec_REJECTED")))
+        st.warning(t("override_warning").format(action=t("commit_approve_btn"), recommendation=t("rec_REJECTED")),
+                   icon=":material/edit_note:")
     if reject_is_override:
-        st.warning(t("override_warning").format(action=t("commit_reject_btn"), recommendation=t("rec_APPROVED")))
+        st.warning(t("override_warning").format(action=t("commit_reject_btn"), recommendation=t("rec_APPROVED")),
+                   icon=":material/edit_note:")
 
     hc1, hc2 = st.columns(2)
     with hc1:
@@ -1618,6 +1471,7 @@ def render_caseworker_decision(item: Dict[str, Any], transfer: Optional[Dict[str
             type="primary" if approve_follows else "secondary",
             width="stretch",
             disabled=approve_is_override and not note_ok,
+            icon=":material/check_circle:",
         )
     with hc2:
         reject_clicked = st.button(
@@ -1626,6 +1480,7 @@ def render_caseworker_decision(item: Dict[str, Any], transfer: Optional[Dict[str
             type="primary" if recommendation == "REJECTED" and not resolved_by_transfer else "secondary",
             width="stretch",
             disabled=reject_is_override and not note_ok,
+            icon=":material/cancel:",
         )
     note = (note or "").strip()
 
@@ -1642,7 +1497,7 @@ def render_caseworker_decision(item: Dict[str, Any], transfer: Optional[Dict[str
                 transfer=transfer,
             )
         except Exception as e:
-            st.error(t("commit_error").format(error=e))
+            st.error(t("commit_error").format(error=e), icon=":material/error:")
             return
         item["status"] = "APPROVED"
         if transfer:
@@ -1677,14 +1532,16 @@ def render_caseworker_decision(item: Dict[str, Any], transfer: Optional[Dict[str
                 reasoning=str(reasoning) + (f"\n\nCaseworker note: {note}" if note else ""),
             )
         except Exception as e:
-            st.error(t("commit_error").format(error=e))
+            st.error(t("commit_error").format(error=e), icon=":material/error:")
             return
         item["status"] = "REJECTED"
         record_request_decision(item, "REJECTED", override=reject_is_override, note=note)
         st.rerun()
 
 
-BANNER_ICONS = {"APPROVED": "✅", "REQUIRES_REVIEW": "⚠️", "REJECTED": "❌"}
+BANNER_ICONS = {"APPROVED": ":material/check_circle:", "REQUIRES_REVIEW": ":material/pending:", "REJECTED": ":material/cancel:"}
+# Decorative status chip above the banner (icon, tone); its text is the existing assessment label
+BANNER_CHIPS = {"APPROVED": ("check_circle", "green"), "REQUIRES_REVIEW": ("pending", "orange"), "REJECTED": ("cancel", "red")}
 CHECK_COLOURS = {"pass": "green", "warn": "orange", "fail": "red", "info": "blue"}
 
 
@@ -1725,10 +1582,12 @@ def render_verification(item: Dict[str, Any], eval_data: Dict[str, Any], decisio
     if not reason:
         banner = banner.replace(" –  ", ". ")
     show = {"APPROVED": st.success, "REQUIRES_REVIEW": st.warning}.get(decision, st.error)
-    show(banner, icon=BANNER_ICONS.get(decision, "❌"))
+    chip_icon, chip_tone = BANNER_CHIPS.get(decision, BANNER_CHIPS["REJECTED"])
+    st.html(ui.status_chip(chip_icon, t(f"assessment_{decision}"), chip_tone))
+    show(banner, icon=BANNER_ICONS.get(decision, ":material/cancel:"))
 
     if view is None:
-        st.markdown(f"**{t('reasoning_header')}**")
+        st.markdown(ui.label("checklist", t("reasoning_header")), unsafe_allow_html=True)
         with st.container(border=True):
             st.markdown(eval_data.get("reasoning") or t("no_reasoning"))
     else:
@@ -1739,7 +1598,7 @@ def render_verification(item: Dict[str, Any], eval_data: Dict[str, Any], decisio
                 for c in view["checks"]
             ))
 
-    st.markdown(f"**{t('request_text_header')}**")
+    st.markdown(ui.label("description", t("request_text_header")), unsafe_allow_html=True)
     with st.container(border=True):
         st.text(localized(item["text"]))
 
@@ -1757,7 +1616,7 @@ def render_verification(item: Dict[str, Any], eval_data: Dict[str, Any], decisio
                                                       special=accessibility.get("employees_with_special_needs", 0))
              if accessibility.get("found") else "-"),
         ]
-        with st.expander(t("details_header")):
+        with st.expander(t("details_header"), icon=":material/manage_search:"):
             st.markdown(f"**{t('details_extracted')}**")
             st.markdown("\n".join(f"- {label}: **{value}**" for label, value in facts))
             st.markdown(f"**{t('details_steps')}**")
@@ -1783,19 +1642,21 @@ def render_request_dialog(ref: str) -> None:
 
     # Budget figures are re-read live, since they may have changed after queueing
     live_budget = check_budget(amount, category) if category else {"error": "no category"}
+    st.html(ui.step(1, "blue"))
     render_verification(item, eval_data, decision, live_budget, is_extension)
 
     if item["status"] == "PENDING":
         transfer = render_issues_and_transfer(item)
-        st.divider()
+        st.html(ui.step(2, "orange"))  # in place of the divider: decoration only
         render_caseworker_decision(item, transfer)
         return
 
-    st.divider()
+    st.html(ui.step(2, "orange"))  # in place of the divider: decoration only
 
     # Decision recorded: offer the form and move on to the next request
     if item["status"] == "APPROVED":
-        st.success(t("committed_success"))
+        st.html(ui.illustration("task_alt", "green", "sm", paper=False))
+        st.success(t("committed_success"), icon=":material/check_circle:")
         if item.get("transfer"):
             transfer = item["transfer"]
             st.success(
@@ -1804,26 +1665,28 @@ def render_request_dialog(ref: str) -> None:
                     donor=transfer["donor"],
                     line=eval_data.get("category", ""),
                     basis=transfer["legal_basis"],
-                )
+                ),
+                icon=":material/swap_horiz:",
             )
         if item.get("pdf_error"):
-            st.error(t("pdf_error").format(error=item["pdf_error"]))
+            st.error(t("pdf_error").format(error=item["pdf_error"]), icon=":material/error:")
         if item.get("pdf"):
             # Consumed here, so the automatic download fires exactly once per approval
             render_pdf_download(item, auto_click=item.pop("auto_download", False))
     else:
-        st.warning(t("committed_reject"))
+        st.warning(t("committed_reject"), icon=":material/cancel:")
 
     next_ref = next_pending_ref(ref)
     remaining = len(pending_requests())
     if next_ref:
         st.caption(t("remaining_in_queue").format(count=remaining))
-        if st.button(t("next_request_btn"), key="next_request_btn", type="primary", width="stretch"):
+        if st.button(t("next_request_btn"), key="next_request_btn", type="primary", width="stretch",
+                     icon=":material/skip_next:"):
             st.session_state["active_request"] = next_ref
             st.rerun()
     else:
         st.caption(t("queue_complete"))
-        if st.button(t("close_btn"), key="close_dialog_btn", width="stretch"):
+        if st.button(t("close_btn"), key="close_dialog_btn", width="stretch", icon=":material/close:"):
             close_dialog()
             st.rerun()
 
@@ -1845,10 +1708,10 @@ def open_request_dialog(ref: str) -> None:
 # Budget chart and history dialogs
 # ------------------------------------------------------------------------------
 
-# Meter colours: app navy below 80 % used, amber from 80 %, red when over budget
-METER_NAVY = "#1E3A8A"
-METER_AMBER = "#B45309"
-METER_RED = "#B91C1C"
+# Meter colours (src/ui_theme.py): green below 80 % used, orange from 80 %, red when over budget
+METER_OK = ui.METER["ok"]
+METER_WARN = ui.METER["warn"]
+METER_OVER = ui.METER["over"]
 
 
 def budget_meters_html(budgets_df: pd.DataFrame) -> str:
@@ -1869,7 +1732,7 @@ def budget_meters_html(budgets_df: pd.DataFrame) -> str:
         remaining = float(budget["Remaining_Budget"])
         committed = total - remaining
         share = committed / total * 100 if total > 0 else 0.0
-        colour = METER_NAVY if share < 80 else (METER_AMBER if share <= 100 else METER_RED)
+        colour, state = (METER_OK, "ok") if share < 80 else ((METER_WARN, "warn") if share <= 100 else (METER_OVER, "over"))
         if remaining >= 0:
             right, right_class = t("meter_left").format(amount=fmt_eur(remaining, 0)), "budget-meter-left"
         else:
@@ -1877,11 +1740,13 @@ def budget_meters_html(budgets_df: pd.DataFrame) -> str:
         caption = t("meter_committed").format(committed=fmt_eur(committed, 0), total=fmt_eur(total, 0))
         parts.append(
             '<div class="budget-meter">'
-            f'<div class="budget-meter-head"><span class="budget-meter-name">{html.escape(name)}</span>'
+            '<div class="budget-meter-head">'
+            f'<span class="budget-meter-icon" aria-hidden="true">{ui.BUDGET_ICONS.get(name, "account_balance")}</span>'
+            f'<span class="budget-meter-name">{html.escape(name)}</span>'
             f'<span class="{right_class}">{html.escape(right)}</span></div>'
             f'<div class="budget-meter-track" role="progressbar" aria-label="{html.escape(name, quote=True)}" '
             f'aria-valuemin="0" aria-valuemax="100" aria-valuenow="{share:.0f}">'
-            f'<div class="budget-meter-fill" style="width: {min(share, 100.0):.1f}%; background-color: {colour};"></div></div>'
+            f'<div class="budget-meter-fill {state}" style="width: {min(share, 100.0):.1f}%; background-color: {colour};"></div></div>'
             f'<div class="budget-meter-caption"><span>{html.escape(caption)}</span>'
             f'<span>{html.escape(t("meter_share").format(pct=round(share)))}</span></div>'
             "</div>"
@@ -1902,6 +1767,7 @@ def render_request_history() -> None:
     if selected != "ALL":
         entries = [e for e in entries if e["decision"] == selected]
     if not entries:
+        st.html(ui.illustration("history", "blue", "sm"))
         st.caption(t("history_empty"))
         return
 
@@ -1928,7 +1794,7 @@ def render_request_history() -> None:
             text = localized(entry.get("text", ""))
             if len(text) > 160:
                 st.text(text[:157].rstrip() + "...")
-                with st.expander(t("request_text_header")):
+                with st.expander(t("request_text_header"), icon=":material/description:"):
                     st.text(text)
             else:
                 st.text(text)
@@ -2053,6 +1919,7 @@ def render_email_actions(run: Dict[str, Any], bidder: Dict[str, Any], place: str
                 file_name=f"{'Zuschlag' if is_award else 'Absage'}_{bidder['bidder']}.pdf".replace(" ", "_"),
                 mime="application/pdf",
                 key=f"pdf_{widget}",
+                icon=":material/picture_as_pdf:",
             )
     sent_key = f"sent_{widget}"
     st.session_state[sent_key] = bool(sent)
@@ -2075,7 +1942,7 @@ def render_letters(run: Dict[str, Any]) -> None:
         )
         letter_col, action_col = st.columns([5, 1.5])
         with letter_col:
-            with st.expander(title):
+            with st.expander(title, icon=":material/mail:"):
                 to = bidder["letter"].get("to")
                 st.caption(f"{t('letter_to')}: {to or t('no_email')} · {t('letter_subject')}: {letter['subject']}")
                 st.markdown(html.escape(letter["body"]).replace("\n", "  \n"))
@@ -2114,6 +1981,7 @@ def render_history_rows(run: Dict[str, Any]) -> None:
 def render_bid_history() -> None:
     runs = sorted(history()["tenders"], key=lambda r: r["evaluated_at"], reverse=True)
     if not runs:
+        st.html(ui.illustration("receipt_long", "orange", "sm"))
         st.caption(t("history_tenders_empty"))
         return
 
@@ -2124,7 +1992,7 @@ def render_bid_history() -> None:
     for index, (ref, tender_runs) in enumerate(groups.items()):
         latest = tender_runs[0]
         title = f"{ref} · {localized(latest['title'])} · {fmt_dt(latest['evaluated_at'])}"
-        with st.expander(title, expanded=index == 0):
+        with st.expander(title, expanded=index == 0, icon=":material/receipt_long:"):
             for run in tender_runs:
                 criteria = " · ".join(f"{t(f'crit_{k}')} {w:g} %" for k, w in run["weights"].items())
                 st.caption(t("tender_run").format(when=fmt_dt(run["evaluated_at"]), criteria=criteria))
@@ -2136,12 +2004,13 @@ def render_bid_history() -> None:
                 render_history_rows(run)
 
 
-# Chart colours: the app navy lightened to the validated chart step, amber for flags, ink for text
-CHART_NAVY = "#2B4DA6"
-CHART_AMBER = "#D97706"
-CHART_INK = "#0F172A"
-CHART_MUTED = "#64748B"
-CHART_GRID = "#E2E8F0"
+# Chart colours (src/ui_theme.py): brand blue for series, orange for flags, ink for text
+CHART_BLUE = ui.CHART["blue"]
+CHART_ORANGE = ui.CHART["orange"]
+CHART_ORANGE_INK = ui.CHART["orange_ink"]
+CHART_INK = ui.CHART["ink"]
+CHART_MUTED = ui.CHART["muted"]
+CHART_GRID = ui.CHART["grid"]
 MONTHS_DE = "['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']"
 
 
@@ -2149,7 +2018,7 @@ def chart_eur_axis() -> alt.Axis:
     """EUR axis labels in the UI language (12.000 € / €12,000)."""
     expr = ("replace(format(datum.value, ',.0f'), /,/g, '.') + ' €'" if st.session_state["lang"] == "DE"
             else "'€' + format(datum.value, ',.0f')")
-    return alt.Axis(labelExpr=expr, labelColor=CHART_MUTED, gridColor=CHART_GRID, domain=False, ticks=False, tickCount=5,
+    return alt.Axis(labelExpr=expr, labelColor=CHART_MUTED, gridColor=CHART_GRID, gridDash=[2, 4], domain=False, ticks=False, tickCount=5,
                     title=None)
 
 
@@ -2184,13 +2053,13 @@ def burnup_chart(data: Dict[str, Any], fmt_date, fmt_share) -> alt.LayerChart:
     actual = frame[frame["kind"] == t("chart_actual")]
     projection = frame[frame["kind"] == t("chart_projection")]
     layers = [
-        alt.Chart(actual).mark_line(interpolate="step-after", color=CHART_NAVY, strokeWidth=2, tooltip=False).encode(x=x, y=y),
-        alt.Chart(actual).mark_circle(size=64, color=CHART_NAVY, opacity=1).encode(x=x, y=y, tooltip=tooltip),
+        alt.Chart(actual).mark_line(interpolate="step-after", color=CHART_BLUE, strokeWidth=2.5, tooltip=False).encode(x=x, y=y),
+        alt.Chart(actual).mark_circle(size=64, color=CHART_BLUE, opacity=1).encode(x=x, y=y, tooltip=tooltip),
     ]
     if not projection.empty:
         layers += [
-            alt.Chart(projection).mark_line(color=CHART_NAVY, strokeWidth=2, strokeDash=[6, 4], tooltip=False).encode(x=x, y=y),
-            alt.Chart(projection.tail(1)).mark_circle(size=64, color="#FFFFFF", stroke=CHART_NAVY, strokeWidth=2, opacity=1)
+            alt.Chart(projection).mark_line(color=CHART_BLUE, strokeWidth=2.5, strokeDash=[6, 4], tooltip=False).encode(x=x, y=y),
+            alt.Chart(projection.tail(1)).mark_circle(size=64, color="#FFFFFF", stroke=CHART_BLUE, strokeWidth=2, opacity=1)
             .encode(x=x, y=y, tooltip=tooltip),
         ]
     budget = pd.DataFrame({"total": [total], "date": [pd.Timestamp(f"{year}-01-01")],
@@ -2201,11 +2070,11 @@ def burnup_chart(data: Dict[str, Any], fmt_date, fmt_share) -> alt.LayerChart:
         alt.Chart(budget).mark_text(align="left", baseline="bottom", dx=4, dy=-4, color=CHART_MUTED, fontSize=12, tooltip=False)
         .encode(x="date:T", y="total:Q", text="label:N"),
     ]
-    return alt.layer(*layers).properties(height=260).configure_view(strokeWidth=0)
+    return ui.style_chart(alt.layer(*layers).properties(height=260).configure_view(strokeWidth=0))
 
 
 def supplier_chart(totals: List[Dict[str, Any]]) -> alt.Chart:
-    """Approved spend per supplier, largest first; flagged suppliers in amber with a text label."""
+    """Approved spend per supplier, largest first; flagged suppliers in orange with a text label."""
     frame = pd.DataFrame([
         {
             "supplier": row["supplier"], "spend": row["spend"], "orders": row["orders"],
@@ -2226,11 +2095,11 @@ def supplier_chart(totals: List[Dict[str, Any]]) -> alt.Chart:
             alt.Tooltip("lines:N", title=t("chart_lines")),
         ],
     )
-    bars = base.mark_bar(cornerRadiusEnd=4, height=20).encode(
-        color=alt.condition("datum.flagged", alt.value(CHART_AMBER), alt.value(CHART_NAVY))
+    bars = base.mark_bar(cornerRadiusEnd=10, height=20).encode(
+        color=alt.condition("datum.flagged", alt.value(CHART_ORANGE), alt.value(CHART_BLUE))
     )
     labels = base.mark_text(align="left", dx=6, color=CHART_INK, fontSize=12).encode(text="label:N")
-    return (bars + labels).properties(height=max(120, 36 * len(frame))).configure_view(strokeWidth=0)
+    return ui.style_chart((bars + labels).properties(height=max(120, 36 * len(frame))).configure_view(strokeWidth=0))
 
 
 def open_history_dialog(view: str) -> None:
@@ -2244,6 +2113,12 @@ def open_history_dialog(view: str) -> None:
 # ==============================================================================
 
 with st.sidebar:
+    # Brand block: decorative circles, agency kicker and app name (the language is already applied above)
+    with st.container(key="hzbrand"):
+        st.html(ui.brand_mark())
+        st.markdown(f'<div class="gov-meta">{t("agency")}</div>', unsafe_allow_html=True)
+        st.markdown(f"**{t('app_name')}**")
+
     lang_choice = st.segmented_control(
         t("lang_label"),
         ["DE", "EN"],
@@ -2253,9 +2128,6 @@ with st.sidebar:
         width="stretch",
     )
     st.session_state["lang"] = lang_choice or "DE"
-
-    st.markdown(f'<div class="gov-meta">{t("agency")}</div>', unsafe_allow_html=True)
-    st.markdown(f"**{t('app_name')}**")
 
     # The active view is rendered as a primary button; CSS turns it into the highlighted list item
     with st.container(key="sidebar_nav"):
@@ -2267,25 +2139,26 @@ with st.sidebar:
                 width="stretch",
                 on_click=go_to,
                 args=(view,),
+                icon=f":material/{ui.VIEW_ART[view]['icon']}:",
             )
 
     st.divider()
-    st.markdown(f"**{t('live_state_header')}**")
+    st.markdown(ui.label("account_balance", t("live_state_header")), unsafe_allow_html=True)
     st.caption(t("live_state_caption"))
     budgets_df = get_budgets_df()
     if not budgets_df.empty:
         # Rebuilt from the database on every rerun, so an approval shows up immediately
         st.markdown(budget_meters_html(budgets_df), unsafe_allow_html=True)
     else:
-        st.info(t("no_budget_data"))
+        st.info(t("no_budget_data"), icon=":material/info:")
 
-    if st.button(t("reset_btn"), key="reset_btn", width="stretch"):
+    if st.button(t("reset_btn"), key="reset_btn", width="stretch", icon=":material/restart_alt:"):
         try:
             reset_demo()
-            st.toast(t("reset_success"))
+            st.toast(t("reset_success"), icon=":material/restart_alt:")
             st.rerun()
         except Exception as e:
-            st.error(t("reset_error").format(error=e))
+            st.error(t("reset_error").format(error=e), icon=":material/error:")
 
     # User manual (built by scripts/build_manual.py) in the UI language; hidden if not built yet
     manual = manual_pdf(st.session_state["lang"])
@@ -2339,8 +2212,13 @@ if current_view in ("verify", "bids"):
         on_click=open_history,
         args=(current_view,),
     )
-st.markdown(f'<div class="gov-meta">{t("agency")}</div>', unsafe_allow_html=True)
-st.title(t(f"nav_{current_view}"))
+# View header: kicker, title and description, with decorative circles and the view's icon on the right
+VIEW_DESC = {"verify": "verify_desc", "bids": "bids_desc", "add": "add_desc", "insights": "insights_desc"}
+with st.container(key=f"hzhero_{current_view}"):
+    st.html(ui.hero_art(current_view))
+    st.markdown(f'<div class="gov-meta">{t("agency")}</div>', unsafe_allow_html=True)
+    st.title(t(f"nav_{current_view}"))
+    st.caption(t(VIEW_DESC[current_view]))
 
 
 # ==============================================================================
@@ -2348,27 +2226,27 @@ st.title(t(f"nav_{current_view}"))
 # ==============================================================================
 
 if current_view == "verify":
-    st.caption(t("verify_desc"))
-
     queue = st.session_state["request_queue"]
     pending = pending_requests()
 
     k1, k2, k3 = st.columns(3)
     with k1:
-        with st.container(border=True):
+        with st.container(border=True, key="hzm_pending"):
             st.metric(t("kpi_pending"), len(pending))
     with k2:
-        with st.container(border=True):
+        with st.container(border=True, key="hzm_approved"):
             st.metric(t("kpi_approved"), sum(1 for r in queue if r["status"] == "APPROVED"))
     with k3:
-        with st.container(border=True):
+        with st.container(border=True, key="hzm_rejected"):
             st.metric(t("kpi_rejected"), sum(1 for r in queue if r["status"] == "REJECTED"))
 
     q_head, q_add = st.columns([3, 1], vertical_alignment="bottom")
     with q_head:
-        st.subheader(t("queue_header"))
+        with st.container(key="hzsec_queue"):
+            st.subheader(t("queue_header"))
     with q_add:
-        st.button(t("go_add_btn"), key="go_add_btn", width="stretch", on_click=go_to, args=("add",))
+        st.button(t("go_add_btn"), key="go_add_btn", width="stretch", on_click=go_to, args=("add",),
+                  icon=":material/add_circle:")
     if pending:
         queue_df = pd.DataFrame(
             [
@@ -2408,7 +2286,8 @@ if current_view == "verify":
             # dialog does not reopen it on the next rerun.
             st.session_state["queue_table_nonce"] += 1
     else:
-        with st.container(border=True):
+        with st.container(border=True, key="hzcard_empty_queue"):
+            st.html(ui.illustration("inbox", "blue", "md"))
             st.caption(t("queue_empty"))
 
     # One dialog per run: the history takes precedence over the request popup
@@ -2423,9 +2302,8 @@ if current_view == "verify":
 # ==============================================================================
 
 elif current_view == "bids":
-    st.caption(t("bids_desc"))
-
     # --- Which request (tender) the bids belong to --------------------------------------
+    st.html(ui.step(1, "blue"))
     # Same source of truth as the request history: approved and not yet evaluated
     open_requests = requests_awaiting_bids(history()["requests"], history()["tenders"])
     tender_ready = bool(open_requests)
@@ -2450,9 +2328,11 @@ elif current_view == "bids":
         else:
             tender_title = tender_titles[tender_ref]
     else:
-        with st.container(border=True):
-            st.info(t("no_tender_requests"))
-            st.button(t("go_verify_requests"), key="go_verify_from_bids", on_click=go_to, args=("verify",))
+        with st.container(border=True, key="hzcard_no_tender"):
+            st.html(ui.illustration("fact_check", "orange", "sm"))
+            st.info(t("no_tender_requests"), icon=":material/info:")
+            st.button(t("go_verify_requests"), key="go_verify_from_bids", on_click=go_to, args=("verify",),
+                      icon=":material/fact_check:")
 
     # --- Quotation upload: the bid table is derived only from the current uploads --------
     # Switching to another request starts with an empty uploader and no cached rows
@@ -2460,6 +2340,7 @@ elif current_view == "bids":
         clear_bid_uploads()
     st.session_state["bid_tender_for"] = tender_ref
 
+    st.html(ui.step(2, "orange"))
     bid_pdfs = st.file_uploader(
         t("bids_pdfs_label"),
         type=["pdf"],
@@ -2493,18 +2374,22 @@ elif current_view == "bids":
     for file_key in upload_keys:
         extraction = extractions[file_key]
         if "error" in extraction:
-            st.error(t("bid_extract_error").format(file=extraction["file"], error=extraction["error"]))
+            st.error(t("bid_extract_error").format(file=extraction["file"], error=extraction["error"]),
+                     icon=":material/error:")
         elif extraction["bid"]["bidder_source"] == "filename":
-            st.warning(t("bidder_from_filename").format(file=extraction["file"], bidder=extraction["bid"]["bidder"]))
+            st.warning(t("bidder_from_filename").format(file=extraction["file"], bidder=extraction["bid"]["bidder"]),
+                       icon=":material/badge:")
     row_keys = [k for k in upload_keys if "bid" in extractions[k]]
 
     if tender_ready and not bid_pdfs:
+        st.html(ui.illustration("upload_file", "blue", "sm"))
         st.caption(t("bids_upload_hint"))
 
     if row_keys:
         # --- Criteria and weights (must total 100 %) ------------------------------------
+        st.html(ui.step(3, "teal"))
         with st.container(border=True):
-            st.markdown(f"**{t('criteria_header')}**")
+            st.markdown(ui.label("tune", t("criteria_header")), unsafe_allow_html=True)
             preset = st.segmented_control(
                 t("preset_label"),
                 list(CRITERIA_PRESETS),
@@ -2531,7 +2416,7 @@ elif current_view == "bids":
             if weights_ok:
                 st.caption(t("weights_ok").format(total=weights_total))
             else:
-                st.error(t("weights_error").format(total=weights_total))
+                st.error(t("weights_error").format(total=weights_total), icon=":material/percent:")
         active_criteria = [key for key, weight in weights.items() if weight > 0]
 
         # --- Bid data: one row per uploaded PDF -------------------------------------------
@@ -2579,7 +2464,8 @@ elif current_view == "bids":
             for column, value in bid_edits.get(file_key, {}).items():
                 table_df.at[file_key, column] = value
 
-        st.markdown(f"**{t('bids_table_header')}**")
+        st.html(ui.step(4, "orange"))
+        st.markdown(ui.label("table_chart", t("bids_table_header")), unsafe_allow_html=True)
         st.caption(t("bids_table_caption"))
         files_hash = hashlib.sha1("|".join(row_keys).encode()).hexdigest()[:12]
         committee_confirmed = st.checkbox(
@@ -2623,7 +2509,7 @@ elif current_view == "bids":
 
         # Agent breakdown and the source text per bidder (details behind the table)
         active_score_keys = [key for key in score_keys if key in active_criteria]
-        with st.expander(t("breakdown_header")):
+        with st.expander(t("breakdown_header"), icon=":material/smart_toy:"):
             for file_key, row in bids_df.iterrows():
                 bid = extractions[file_key]["bid"]
                 st.markdown(f"**{row['bidder'] or extractions[file_key]['file']}**")
@@ -2690,20 +2576,21 @@ elif current_view == "bids":
             problems.append(t("duplicate_bidder").format(bidders=", ".join(duplicates)))
 
         if problems:
-            st.warning(t("blocked_header") + "\n\n" + "\n".join(f"- {p}" for p in problems))
+            st.warning(t("blocked_header") + "\n\n" + "\n".join(f"- {p}" for p in problems), icon=":material/block:")
         if invalid_prices:
-            st.error(t("invalid_price_error").format(bidders=", ".join(invalid_prices)))
+            st.error(t("invalid_price_error").format(bidders=", ".join(invalid_prices)), icon=":material/euro:")
 
         can_evaluate = (
             tender_ready and weights_ok and committee_confirmed and bool(bids_input) and not problems and not invalid_prices
         )
-        if st.button(t("eval_bids_btn"), key="eval_bids_btn", type="primary", width="stretch", disabled=not can_evaluate):
+        if st.button(t("eval_bids_btn"), key="eval_bids_btn", type="primary", width="stretch", disabled=not can_evaluate,
+                     icon=":material/calculate:"):
             with st.spinner(t("spinner_bids")):
                 try:
                     result = evaluate_bids(bids_input, {k: weights[k] for k in active_criteria})
                 except ValueError as e:
                     st.session_state.pop("matrix_result", None)
-                    st.error(str(e))
+                    st.error(str(e), icon=":material/error:")
                 else:
                     # Agent scores: the same scoring rule applied to the values as read from the
                     # PDFs, before any correction by the committee; for References / Service and
@@ -2749,22 +2636,24 @@ elif current_view == "bids":
         losers = res["losers"]
         result_weights = res.get("weights") or {}
 
-        st.divider()
-        st.caption(t("winner_label"))
-        st.subheader(winner["bidder"])
+        st.html(ui.step(5, "blue"))  # in place of the divider: decoration only
+        with st.container(border=True, key="hzcard_winner"):
+            st.caption(t("winner_label"))
+            st.subheader(winner["bidder"])
         runner_up_points = losers[0]["total_points"] if losers else winner["total_points"]
         w1, w2, w3 = st.columns(3)
         with w1:
-            with st.container(border=True):
+            with st.container(border=True, key="hzm_points"):
                 st.metric(t("winner_points"), f"{winner['total_points']:.2f}")
         with w2:
-            with st.container(border=True):
+            with st.container(border=True, key="hzm_price"):
                 st.metric(t("winner_price"), fmt_eur(winner["price"]))
         with w3:
-            with st.container(border=True):
+            with st.container(border=True, key="hzm_lead"):
                 st.metric(t("winner_lead"), f"+{winner['total_points'] - runner_up_points:.2f}")
 
-        st.subheader(t("matrix_header"))
+        with st.container(key="hzsec_matrix"):
+            st.subheader(t("matrix_header"))
         st.caption(" · ".join(f"{t(f'crit_{k}')} {w:g} %" for k, w in result_weights.items()))
         matrix_config = {
             "bidder": st.column_config.TextColumn(t("col_bidder")),
@@ -2785,7 +2674,8 @@ elif current_view == "bids":
             column_config=matrix_config,
         )
 
-        st.subheader(t("letters_header"))
+        with st.container(key="hzsec_letters"):
+            st.subheader(t("letters_header"))
         st.caption(t("letters_caption"))
         run = find_run(res.get("history_id"))
         if run is not None:
@@ -2800,11 +2690,10 @@ elif current_view == "bids":
 # ==============================================================================
 
 elif current_view == "insights":
-    st.caption(t("insights_desc"))
     # The end-to-end overview from the user manual (docs/manual/diagrams), if it has been built
     overview = DIAGRAM_DIR / f"1_overview_{st.session_state['lang'].lower()}.png"
     if overview.exists():
-        with st.expander(t("how_it_works")):
+        with st.expander(t("how_it_works"), icon=":material/schema:"):
             st.image(str(overview), caption=t("how_it_works_caption"))
     lines = get_budget_lines()
     approvals = get_approved_spending()
@@ -2817,7 +2706,7 @@ elif current_view == "insights":
         return f"{pct} %" if st.session_state.get("lang", "DE") == "DE" else f"{pct}%"
 
     # --- Tile 1: budget per line, burn-up chart and projection to 31 Dec -------------------
-    with st.container(border=True):
+    with st.container(border=True, key="hzcard_tile_budget"):
         st.subheader(t("tile_budget"))
         st.caption(t("tile_budget_caption"))
         forecast = budget_forecast(lines, approvals, date.today())
@@ -2852,7 +2741,7 @@ elif current_view == "insights":
             )
         soon = [row["runout_soon"] for row in forecast]
         styled = pd.DataFrame(forecast_rows).style.apply(
-            lambda column: [f"color: {CHART_AMBER}; font-weight: 600" if flag else "" for flag in soon],
+            lambda column: [f"color: {CHART_ORANGE_INK}; font-weight: 600" if flag else "" for flag in soon],
             subset=["runout"],
         )
         st.dataframe(
@@ -2870,7 +2759,7 @@ elif current_view == "insights":
         )
 
     # --- Tile 2: spend per supplier and concentration per line --------------------------------
-    with st.container(border=True):
+    with st.container(border=True, key="hzcard_tile_suppliers"):
         st.subheader(t("tile_suppliers"))
         st.caption(t("tile_suppliers_caption"))
         shares = supplier_shares(approvals, SUPPLIER_SHARE_LIMIT)
@@ -2908,7 +2797,7 @@ elif current_view == "insights":
                 if r["above_limit"]
             ]
             if warnings:
-                st.warning("\n".join(f"- {w}" for w in warnings))
+                st.warning("\n".join(f"- {w}" for w in warnings), icon=":material/pie_chart:")
             unchecked = sorted({r["category"] for r in shares if not r["line_checked"]})
             if unchecked:
                 st.caption(t("ins_concentration_skipped").format(
@@ -2917,26 +2806,26 @@ elif current_view == "insights":
                 ))
 
     # --- Tile 3: AI oversight ---------------------------------------------------------------
-    with st.container(border=True):
+    with st.container(border=True, key="hzcard_tile_oversight"):
         st.subheader(t("tile_oversight"))
         st.caption(t("tile_oversight_caption"))
         stats = oversight(history()["requests"], history()["transfers"])
         bid_changes = committee_changes(history()["tenders"])
         m1, m2, m3, m4, m5 = st.columns(5)
-        with m1:
+        with m1, st.container(key="hzm_agreement"):
             st.metric(
                 t("ins_agreement"),
                 fmt_share(stats["rate"]) if stats["rate"] is not None else "–",
                 help=t("ins_agreement_detail").format(agreed=stats["agreed"], compared=stats["compared"]),
             )
             st.caption(t("ins_agreement_detail").format(agreed=stats["agreed"], compared=stats["compared"]))
-        with m2:
+        with m2, st.container(key="hzm_overrides"):
             st.metric(t("ins_overrides"), len(stats["overrides"]))
-        with m3:
+        with m3, st.container(key="hzm_deferred"):
             st.metric(t("ins_deferred"), len(stats["deferred"]))
-        with m4:
+        with m4, st.container(key="hzm_transfers"):
             st.metric(t("ins_transfers"), f"{stats['transfers_proposed']} / {stats['transfers_accepted']}")
-        with m5:
+        with m5, st.container(key="hzm_committee"):
             st.metric(t("ins_committee_changes"), len(bid_changes))
 
         def decisions_table(entries: List[Dict[str, Any]]) -> None:
@@ -2969,11 +2858,11 @@ elif current_view == "insights":
                 },
             )
 
-        st.markdown(f"**{t('ins_overrides_header')}**")
+        st.markdown(ui.label("swap_horiz", t("ins_overrides_header")), unsafe_allow_html=True)
         decisions_table(stats["overrides"])
-        st.markdown(f"**{t('ins_deferred_header')}**")
+        st.markdown(ui.label("person", t("ins_deferred_header")), unsafe_allow_html=True)
         decisions_table(stats["deferred"])
-        st.markdown(f"**{t('ins_committee_header')}**")
+        st.markdown(ui.label("groups", t("ins_committee_header")), unsafe_allow_html=True)
         if bid_changes:
             st.dataframe(
                 pd.DataFrame(
@@ -3009,14 +2898,13 @@ elif current_view == "insights":
 # ==============================================================================
 
 else:
-    st.caption(t("add_desc"))
-
     form_key = st.session_state["form_key"]
     text_widget_key = f"request_text_{form_key}"
     if text_widget_key not in st.session_state:
         st.session_state[text_widget_key] = st.session_state.get("draft_text", "")
 
     with st.container(border=True):
+        st.html(ui.step(1, "blue"))
         uploaded_pdf = st.file_uploader(
             t("pdf_label"),
             type=["pdf"],
@@ -3040,18 +2928,20 @@ else:
                         st.session_state["draft_text"] = extracted_text
                         st.session_state[text_widget_key] = extracted_text
                         st.session_state["last_uploaded_pdf"] = uploaded_pdf.name
-                        st.toast(t("pdf_extracted").format(count=len(extracted_text)))
+                        st.toast(t("pdf_extracted").format(count=len(extracted_text)), icon=":material/upload_file:")
                     else:
-                        st.warning(t("pdf_extract_warning"))
+                        st.warning(t("pdf_extract_warning"), icon=":material/upload_file:")
                 except Exception as e:
-                    st.error(t("pdf_extract_error").format(error=e))
+                    st.error(t("pdf_extract_error").format(error=e), icon=":material/error:")
 
+        st.html(ui.step(2, "orange"))
         st.caption(t("or_divider"))
 
-        st.markdown(f"**{t('sample_header')}**")
+        st.markdown(ui.label("lightbulb", t("sample_header")), unsafe_allow_html=True)
         for sample_col, sample_key in zip(st.columns(3), ["valid", "unapproved", "review"]):
             with sample_col:
-                if st.button(t(f"sample_{sample_key}"), key=f"sample_{sample_key}", width="stretch"):
+                if st.button(t(f"sample_{sample_key}"), key=f"sample_{sample_key}", width="stretch",
+                             icon=SAMPLE_ICONS[sample_key]):
                     st.session_state["draft_text"] = SAMPLE_REQUESTS[st.session_state["lang"]][sample_key]
                     st.session_state[text_widget_key] = SAMPLE_REQUESTS[st.session_state["lang"]][sample_key]
                     st.rerun()
@@ -3064,12 +2954,14 @@ else:
         )
         st.session_state["draft_text"] = request_text or ""
 
-        submit_clicked = st.button(t("submit_btn"), key="submit_btn", type="primary", width="stretch")
+        st.html(ui.step(3, "teal"))
+        submit_clicked = st.button(t("submit_btn"), key="submit_btn", type="primary", width="stretch",
+                                   icon=":material/send:")
 
     if submit_clicked:
         current_input = (request_text or "").strip()
         if not current_input:
-            st.warning(t("no_input_warning"))
+            st.warning(t("no_input_warning"), icon=":material/edit_note:")
         else:
             source = (
                 t("source_pdf").format(name=st.session_state["last_uploaded_pdf"])
@@ -3085,5 +2977,8 @@ else:
 
     last_submitted = st.session_state.pop("last_submitted", None)
     if last_submitted:
-        st.success(t("submitted_success").format(ref=last_submitted, count=len(pending_requests())))
-        st.button(t("go_verify_btn"), key="go_verify_btn", on_click=go_to, args=("verify",))
+        st.html(ui.illustration("task_alt", "green", "sm", paper=False))
+        st.success(t("submitted_success").format(ref=last_submitted, count=len(pending_requests())),
+                   icon=":material/check_circle:")
+        st.button(t("go_verify_btn"), key="go_verify_btn", on_click=go_to, args=("verify",),
+                  icon=":material/fact_check:")
