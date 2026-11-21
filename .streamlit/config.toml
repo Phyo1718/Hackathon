@@ -1,7 +1,79 @@
+[server]
+# Serves static/ (self-hosted fonts and illustrations) at app/static/
+enableStaticServing = true
+
 [theme]
 base = "light"
-primaryColor = "#1E3A8A"
+primaryColor = "#076A89"
+backgroundColor = "#F8F7F4"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#45465A"
+linkColor = "#076A89"
+borderColor = "#E4E2DC"
+dataframeBorderColor = "#E4E2DC"
+dataframeHeaderBackgroundColor = "#F2F0EB"
+dataframeHeaderTextColor = "#45465A"
+showWidgetBorder = true
+baseRadius = "12px"
+buttonRadius = "999px"
+font = "Barlow, Segoe UI, system-ui, sans-serif"
+headingFont = "Zilla Slab, Georgia, serif"
+headingFontWeights = 700
+# Semantic colours: approve = green, review/warning = orange, reject/error = red, info = blue.
+# Text colours use the "ink" tones (WCAG AA on light backgrounds).
+blueColor = "#0B99C4"
+blueTextColor = "#076A89"
+blueBackgroundColor = "#E6F3F7"
+greenColor = "#2F6B4F"
+greenTextColor = "#2F6B4F"
+greenBackgroundColor = "#EAF3EE"
+orangeColor = "#CC6815"
+orangeTextColor = "#A3510E"
+orangeBackgroundColor = "#FBEFE4"
+yellowColor = "#CC6815"
+yellowTextColor = "#A3510E"
+yellowBackgroundColor = "#FBEFE4"
+redColor = "#D1344F"
+redTextColor = "#B82B45"
+redBackgroundColor = "#FBEAED"
+chartCategoricalColors = ["#0B99C4", "#CC6815", "#8EBE9E", "#00837D", "#D1344F", "#6B6C7A"]
+
+[[theme.fontFaces]]
+family = "Barlow"
+url = "app/static/fonts/Barlow-400.woff2"
+weight = 400
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Barlow"
+url = "app/static/fonts/Barlow-400-italic.woff2"
+weight = 400
+style = "italic"
+
+[[theme.fontFaces]]
+family = "Barlow"
+url = "app/static/fonts/Barlow-500.woff2"
+weight = 500
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Barlow"
+url = "app/static/fonts/Barlow-600.woff2"
+weight = 600
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Barlow"
+url = "app/static/fonts/Barlow-700.woff2"
+weight = 700
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Zilla Slab"
+url = "app/static/fonts/ZillaSlab-BoldItalic.woff2"
+weight = 700
+style = "italic"
+
+[theme.sidebar]
 backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F8FAFC"
-textColor = "#0F172A"
-font = "sans serif"
+secondaryBackgroundColor = "#F2F0EB"
