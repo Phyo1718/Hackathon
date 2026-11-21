@@ -1,0 +1,36 @@
+%% Who decides what: the agent prepares, the human decides
+flowchart LR
+  classDef agent fill:#DBEAFE,stroke:#2563EB,stroke-width:1.5px,color:#0F172A
+  classDef human fill:#1E3A8A,stroke:#1E3A8A,color:#FFFFFF,font-weight:bold
+  classDef doc fill:#F1F5F9,stroke:#64748B,color:#0F172A
+  classDef locked fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:6 4,color:#475569
+  classDef step fill:#FFFFFF,stroke:#94A3B8,color:#0F172A
+
+  subgraph AG["AI · Agent prepares"]
+    A1("1 Request: checks budget, supplier,<br/>accessibility; recommends"):::agent
+    A2("2 Budget: suggests a budget line,<br/>pre-fills the Deckungsantrag"):::agent
+    A3("3 Bids: reads the PDFs,<br/>proposes scores"):::agent
+    A4("4 Evaluation: calculates ranking<br/>and price points"):::agent
+    A5("5 Letters: writes award<br/>and rejection letters"):::agent
+    A6("6 Oversight: counts agreement<br/>and overrides"):::agent
+  end
+  subgraph HU["👤 Human decides"]
+    H1["👤 Approves or rejects;<br/>override with justification"]:::human
+    H2["👤 Signs the application;<br/>booked only with the approval"]:::human
+    H3["👤 Committee reviews, edits<br/>and confirms the scores"]:::human
+    H4["👤 Checks the result<br/>(Recommended supplier)"]:::human
+    H5["👤 Award approved;<br/>sends the emails"]:::human
+    H6["👤 Management reviews<br/>the AI oversight"]:::human
+  end
+  A1 --> H1
+  A2 --> H2
+  A3 --> H3
+  A4 --> H4
+  A5 --> H5
+  A6 --> H6
+
+  subgraph LEG["Legend"]
+    direction LR
+    G1("AI · Agent step"):::agent ~~~ G2["👤 Human decision"]:::human ~~~ G3@{ shape: doc, label: "Document / output" } ~~~ G4["Locked"]:::locked
+  end
+  class G3 doc

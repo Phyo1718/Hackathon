@@ -1,0 +1,31 @@
+%% Request Verification: agent recommendation, caseworker decision
+flowchart TB
+  classDef agent fill:#DBEAFE,stroke:#2563EB,stroke-width:1.5px,color:#0F172A
+  classDef human fill:#1E3A8A,stroke:#1E3A8A,color:#FFFFFF,font-weight:bold
+  classDef doc fill:#F1F5F9,stroke:#64748B,color:#0F172A
+  classDef locked fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:6 4,color:#475569
+  classDef step fill:#FFFFFF,stroke:#94A3B8,color:#0F172A
+
+  P1["Open a pending request<br/>(Request Verification)"]:::step
+  A1("AI · Recommendation:<br/>Compliant · Review required ·<br/>Non-compliant"):::agent
+  H1{"👤 Approve<br/>or Reject?"}:::human
+  H2["👤 Justification in the note<br/>(at least 15 characters)"]:::human
+  S1["Saved in the request history,<br/>counted in AI oversight"]:::step
+  A2("AI · Budget insufficient:<br/>suggest a budget line<br/>with free funds"):::agent
+  D1@{ shape: doc, label: "Draft Deckungsantrag (PDF)" }
+  H3["👤 Application signed,<br/>budget transfer ticked"]:::human
+  S2["Approve: budgets of both<br/>lines updated"]:::step
+
+  P1 --> A1 --> H1
+  H1 -- as recommended --> S1
+  H1 -- against the recommendation --> H2 --> S1
+  A1 -. budget insufficient .-> A2 --> D1 --> H3 --> S2 --> S1
+  class D1 doc
+
+  subgraph LEG["Legend"]
+    direction LR
+    G1("AI · Agent step"):::agent ~~~ G2["👤 Human decision"]:::human ~~~ G3@{ shape: doc, label: "Document / output" } ~~~ G4["Locked"]:::locked
+  end
+  class G3 doc
+  %% Keep the legend below the flow
+  S1 ~~~ LEG

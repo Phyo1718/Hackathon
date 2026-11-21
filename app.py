@@ -4,6 +4,8 @@ import html
 import json
 import re
 import sqlite3
+import sys
+import unicodedata
 from contextlib import closing
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -15,7 +17,18 @@ import streamlit as st
 from dotenv import load_dotenv
 from pypdf import PdfReader
 
-from src.agent import (
+# Streamlit re-runs app.py on every interaction but keeps the imported src/ modules. Without a
+# file watcher (watchdog) a server started before a change would run new app code against old
+# modules, so they are dropped and re-imported whenever a file in src/ has changed.
+_SRC_FINGERPRINT = tuple(sorted((f.name, f.stat().st_mtime_ns) for f in (Path(__file__).parent / "src").glob("*.py")))
+if getattr(sys.modules.get("src"), "_fingerprint", _SRC_FINGERPRINT) != _SRC_FINGERPRINT:
+    for _name in [n for n in sys.modules if n == "src" or n.startswith("src.")]:
+        del sys.modules[_name]
+import src  # noqa: E402
+
+src._fingerprint = _SRC_FINGERPRINT
+
+from src.agent import (  # noqa: E402
     CRITERIA,
     CRITERIA_PRESETS,
     ExtractedRequest,
@@ -30,7 +43,6 @@ from src.agent import (
     generate_deckungsantrag_pdf,
     get_approved_spending,
     get_budget_lines,
-    generate_rejection_letters,
     has_api_key,
     requests_awaiting_bids,
     score_bids,
@@ -40,6 +52,15 @@ from src.agent import (
 )
 from src.bid_parser import BidExtractionError, parse_bid_pdf
 from src.bid_scoring import explain, score_bid
+from src.letters import (
+    build_letters,
+    email_body,
+    email_lock_reasons,
+    gmail_url,
+    letter_pdf,
+    mailto_url,
+    stored_letter,
+)
 from src.demo_seed import HISTORICAL_REQUESTS, SEED_REQUESTS, SEED_TENDER
 from src.init_db import get_db_path, init_db
 from src.insights import SUPPLIER_SHARE_LIMIT, budget_forecast, committee_changes, oversight, supplier_shares
@@ -55,8 +76,9 @@ def database_needs_init() -> bool:
     try:
         with closing(sqlite3.connect(get_db_path())) as conn:
             columns = {row[1] for row in conn.execute("PRAGMA table_info(Budgets);")}
+            supplier_columns = {row[1] for row in conn.execute("PRAGMA table_info(Suppliers);")}
             tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table';")}
-        return "Account_Type" not in columns or "Employees" not in tables
+        return "Account_Type" not in columns or "Email" not in supplier_columns or "Employees" not in tables
     except Exception:
         return True
 
@@ -125,6 +147,9 @@ TRANSLATIONS = {
         "live_state_caption": "Live data from the municipal budget database",
         "no_budget_data": "No budget data available.",
         "reset_btn": "Reset Demo Data",
+        "manual_btn": "📘 User manual",
+        "how_it_works": "How it works",
+        "how_it_works_caption": "From the request to Management Insights: the agent prepares, people decide.",
         "reset_success": "Database and request queue reset to the initial demo state.",
         "reset_error": "Database reset failed: {error}",
         # View 1: Request Verification
@@ -191,13 +216,40 @@ TRANSLATIONS = {
         "tender_run": "Evaluated {when} · {criteria}",
         "col_rank": "Rank",
         "col_status": "Status",
-        "col_agent_score": "{criterion} (agent)",
-        "col_committee_score": "{criterion} (committee)",
-        "not_proposed": "not proposed",
-        "not_extracted": "not stated in bid",
-        "status_winner": "Recommended award",
-        "status_generated": "Rejection letter generated (§ 13 UVgO)",
-        "status_failed": "Rejection letter failed, retry",
+        "status_recommended": "Recommended supplier",
+        "status_award_sent": "Award sent {when}",
+        "status_not_selected": "Not selected",
+        "status_rejection_sent": "Rejection sent {when}",
+        "short_price": "Price (0-10)",
+        "short_delivery": "Delivery (0-10)",
+        "short_warranty": "Warranty (0-10)",
+        "short_references": "Ref./Service",
+        "short_concept": "Concept/Quality",
+        "col_email": "Email",
+        "letters_header": "Award and rejection letters (§ 46 UVgO)",
+        "letters_caption": "One email per bidder, never several bidders in one email. Opening the mail program cannot confirm that the email was sent: tick 'Mark as sent' after sending.",
+        "award_approval": "Award approved (Freigabe erteilt) – I am authorised to award this contract",
+        "award_approval_help": "The award letter concludes the contract. Send only after approval.",
+        "rejection_email_help": "Rejection letter (§ 46 UVgO). Unlocked by the award approval; letters can be sent in any order.",
+        "letter_award": "Award letter",
+        "letter_rejection": "Rejection letter",
+        "letter_title": "{bidder} · {kind} · {status}",
+        "letter_to": "To",
+        "letter_subject": "Subject",
+        "email_btn": "✉ Email",
+        "gmail_link": "Open in Gmail",
+        "letter_pdf": "Full letter (PDF)",
+        "letter_shortened": "The email text is shortened; attach the PDF.",
+        "mark_sent": "Mark as sent",
+        "lock_approval": "Tick 'Award approved' to unlock the emails.",
+        "lock_email_missing": "Email address missing",
+        "email_input": "Email address",
+        "email_send": "✉ Send",
+        "email_reopen": "✉ Open again",
+        "sent_on": "Sent {when}",
+        "no_email": "no email address",
+        "breakdown_offer": "Offer: {item} · quantity {quantity} · price basis {basis} · email {email}",
+        "breakdown_sources": "Source text from PDF: {text}",
         "meter_total": "Total available: {available} of {total}",
         "meter_left": "{amount} left",
         "meter_over": "{amount} over budget",
@@ -265,7 +317,7 @@ TRANSLATIONS = {
         "source_pdf": "PDF: {name}",
         "source_sample": "Sample request",
         # View 2: Bid Evaluation
-        "bids_desc": "Upload the quotations, check the extracted bid data and the scores proposed by the agent, confirm them as the committee and run the weighted evaluation. Rejection letters under § 13 UVgO are generated for unsuccessful bidders.",
+        "bids_desc": "Upload the quotations, check the extracted bid data and the scores proposed by the agent, confirm them as the committee and run the weighted evaluation. Award and rejection letters (§ 46 UVgO) are then prepared for every bidder.",
         "criteria_header": "Evaluation criteria and weights",
         "preset_label": "Criteria set",
         "preset_sheet": "Official sheet (price, references/service, concept/quality)",
@@ -284,17 +336,11 @@ TRANSLATIONS = {
         "bid_extract_error": "{file} could not be read: {error}",
         "bidder_from_filename": "{file}: no supplier name found in the PDF. The bidder name '{bidder}' was taken from the file name; please check it.",
         "bids_upload_hint": "Upload the bidders' quotations (PDF) to extract the bid data.",
-        "evidence_none": "no values found in the PDF",
         "bids_table_header": "Bid data",
-        "bids_table_caption": "Values read from the PDFs are shown with their source text and can be corrected. References / Service and Concept / Quality are proposed by the agent (AI) with the same rubric for every bidder; the committee can overwrite any value (Committee).",
+        "bids_table_caption": "Price and scores are read from the PDFs and can be corrected before the evaluation. References / Service and Concept / Quality are proposed by the agent with the same rubric for every bidder; the breakdown and the source text from the PDFs are below the table.",
         "help_references": "Can this supplier be trusted to deliver and support us? Track record with the city, references for comparable deliveries named in the bid, warranty and after-sales service.",
         "help_concept": "How well does this offer fit what was requested? Item type and quantity (brand-neutral), delivery time and completeness of the offer (price basis, specification, validity).",
-        "col_references_basis": "References / Service: basis",
-        "col_concept_basis": "Concept / Quality: basis",
-        "help_basis": "AI: the agent's proposal with its reasons. Committee: the value was changed by the evaluation committee.",
         "tag_agent": "AI",
-        "tag_committee": "Committee (AI proposed {score})",
-        "tag_committee_only": "Committee",
         "missing_score": "{bidder}: {criterion} – {reason}",
         "committee_confirm": "The evaluation committee has reviewed and confirmed the scores",
         "committee_confirm_help": "Required before the evaluation. The committee remains responsible for every score, including the ones proposed by the agent.",
@@ -302,15 +348,11 @@ TRANSLATIONS = {
         "breakdown_required": "required: {reason}",
         "breakdown_committee": "Committee value: {score}",
         "col_bidder": "Bidder",
-        "col_item": "Item",
-        "col_quantity": "Qty",
         "col_price": "Price (EUR)",
-        "col_price_basis": "Price basis",
         "col_delivery_days": "Delivery (days)",
         "col_warranty_months": "Warranty (months)",
         "col_references": "References / Service (0-10)",
         "col_concept": "Concept / Quality (0-10)",
-        "col_evidence": "Source text from PDF",
         "col_score": "{criterion} (0-10)",
         "col_points": "{criterion} pts",
         "col_total_pts": "Total pts",
@@ -322,17 +364,12 @@ TRANSLATIONS = {
         "missing_bidder": "Row {row}: bidder name required",
         "eval_bids_btn": "Run Evaluation",
         "invalid_price_error": "Every bid price must be greater than EUR 0. Please correct: {bidders}",
-        "spinner_bids": "Calculating the weighted evaluation and preparing rejection letters under § 13 UVgO...",
-        "winner_label": "Recommended award",
+        "spinner_bids": "Calculating the weighted evaluation...",
+        "winner_label": "Recommended supplier",
         "winner_points": "Total points (of 100)",
         "winner_price": "Bid price",
         "winner_lead": "Lead over runner-up",
         "matrix_header": "Scoring matrix",
-        "rejections_header": "Rejection justifications (§ 13 UVgO)",
-        "rejection_title": "{bidder} · {price} · {points} points",
-        "no_reason": "No justification available.",
-        "letter_error": "The rejection letter for {bidder} could not be generated: {error}",
-        "retry_letters_btn": "Retry letters",
     },
     "DE": {
         "agency": "Stadt Hildesheim | Zentrale Vergabestelle",
@@ -386,6 +423,9 @@ TRANSLATIONS = {
         "live_state_caption": "Live-Daten aus der kommunalen Haushaltsdatenbank",
         "no_budget_data": "Keine Budgetdaten verfügbar.",
         "reset_btn": "Demo-Daten zurücksetzen",
+        "manual_btn": "📘 Benutzerhandbuch",
+        "how_it_works": "So funktioniert der Assistent",
+        "how_it_works_caption": "Vom Antrag bis zur Management-Übersicht: Der Agent bereitet vor, Menschen entscheiden.",
         "reset_success": "Datenbank und Antragswarteschlange auf den Demo-Stand zurückgesetzt.",
         "reset_error": "Zurücksetzen der Datenbank fehlgeschlagen: {error}",
         # View 1: Request Verification
@@ -452,13 +492,40 @@ TRANSLATIONS = {
         "tender_run": "Gewertet am {when} · {criteria}",
         "col_rank": "Rang",
         "col_status": "Status",
-        "col_agent_score": "{criterion} (Agent)",
-        "col_committee_score": "{criterion} (Kommission)",
-        "not_proposed": "nicht vorgeschlagen",
-        "not_extracted": "im Angebot nicht angegeben",
-        "status_winner": "Zuschlag empfohlen",
-        "status_generated": "Absageschreiben erstellt (§ 13 UVgO)",
-        "status_failed": "Absageschreiben fehlgeschlagen, erneut erstellen",
+        "status_recommended": "Empfohlener Bieter",
+        "status_award_sent": "Zuschlag versandt {when}",
+        "status_not_selected": "Nicht berücksichtigt",
+        "status_rejection_sent": "Absage versandt {when}",
+        "short_price": "Preis (0-10)",
+        "short_delivery": "Lieferzeit (0-10)",
+        "short_warranty": "Garantie (0-10)",
+        "short_references": "Ref./Service",
+        "short_concept": "Konzept/Qualität",
+        "col_email": "E-Mail",
+        "letters_header": "Zuschlags- und Absageschreiben (§ 46 UVgO)",
+        "letters_caption": "Eine E-Mail je Bieter, nie mehrere Bieter in einer E-Mail. Das Öffnen des E-Mail-Programms bestätigt keinen Versand: Nach dem Senden 'Als versandt markieren' anhaken.",
+        "award_approval": "Zuschlag freigegeben (Freigabe erteilt) – ich bin berechtigt, diesen Auftrag zu vergeben",
+        "award_approval_help": "Das Zuschlagsschreiben schließt den Vertrag. Erst nach Freigabe versenden.",
+        "rejection_email_help": "Absageschreiben (§ 46 UVgO). Mit der Freigabe des Zuschlags freigeschaltet; die Schreiben können in beliebiger Reihenfolge versandt werden.",
+        "letter_award": "Zuschlagsschreiben",
+        "letter_rejection": "Absageschreiben",
+        "letter_title": "{bidder} · {kind} · {status}",
+        "letter_to": "An",
+        "letter_subject": "Betreff",
+        "email_btn": "✉ E-Mail",
+        "gmail_link": "In Gmail öffnen",
+        "letter_pdf": "Vollständiges Schreiben (PDF)",
+        "letter_shortened": "Der E-Mail-Text ist gekürzt; bitte die PDF anhängen.",
+        "mark_sent": "Als versandt markieren",
+        "lock_approval": "Zum Freischalten der E-Mails 'Zuschlag freigegeben' anhaken.",
+        "lock_email_missing": "E-Mail-Adresse fehlt",
+        "email_input": "E-Mail-Adresse",
+        "email_send": "✉ Senden",
+        "email_reopen": "✉ Erneut öffnen",
+        "sent_on": "Versandt {when}",
+        "no_email": "keine E-Mail-Adresse",
+        "breakdown_offer": "Angebot: {item} · Menge {quantity} · Preisbasis {basis} · E-Mail {email}",
+        "breakdown_sources": "Fundstellen in der PDF: {text}",
         "meter_total": "Insgesamt verfügbar: {available} von {total}",
         "meter_left": "{amount} verfügbar",
         "meter_over": "{amount} über Budget",
@@ -526,7 +593,7 @@ TRANSLATIONS = {
         "source_pdf": "PDF: {name}",
         "source_sample": "Beispielantrag",
         # View 2: Bid Evaluation
-        "bids_desc": "Laden Sie die Angebote hoch, prüfen Sie die ausgelesenen Angebotsdaten und die vom Agenten vorgeschlagenen Punkte, bestätigen Sie sie als Kommission und starten Sie die gewichtete Wertung. Für nicht berücksichtigte Bieter werden Absageschreiben nach § 13 UVgO erstellt.",
+        "bids_desc": "Laden Sie die Angebote hoch, prüfen Sie die ausgelesenen Angebotsdaten und die vom Agenten vorgeschlagenen Punkte, bestätigen Sie sie als Kommission und starten Sie die gewichtete Wertung. Danach werden Zuschlags- und Absageschreiben (§ 46 UVgO) für alle Bieter vorbereitet.",
         "criteria_header": "Wertungskriterien und Gewichtung",
         "preset_label": "Kriterienset",
         "preset_sheet": "Offizielle Auswertung (Preis, Referenzen/Service, Konzept/Qualität)",
@@ -545,17 +612,11 @@ TRANSLATIONS = {
         "bid_extract_error": "{file} konnte nicht gelesen werden: {error}",
         "bidder_from_filename": "{file}: In der PDF wurde kein Anbietername gefunden. Der Bietername '{bidder}' wurde aus dem Dateinamen übernommen; bitte prüfen.",
         "bids_upload_hint": "Laden Sie die Angebote der Bieter (PDF) hoch, um die Angebotsdaten auszulesen.",
-        "evidence_none": "keine Werte in der PDF gefunden",
         "bids_table_header": "Angebotsdaten",
-        "bids_table_caption": "Aus den PDFs ausgelesene Werte werden mit ihrer Fundstelle angezeigt und können korrigiert werden. Referenzen / Service und Konzept / Qualität schlägt der Agent (KI) nach demselben Raster für alle Bieter vor; die Kommission kann jeden Wert überschreiben (Kommission).",
+        "bids_table_caption": "Preis und Punkte werden aus den PDFs ausgelesen und können vor der Wertung korrigiert werden. Referenzen / Service und Konzept / Qualität schlägt der Agent nach demselben Raster für alle Bieter vor; Begründung und Fundstellen in den PDFs stehen unter der Tabelle.",
         "help_references": "Kann man sich auf diesen Lieferanten bei Lieferung und Betreuung verlassen? Zusammenarbeit mit der Stadt, im Angebot genannte Referenzen für vergleichbare Lieferungen, Garantie und Service nach dem Kauf.",
         "help_concept": "Wie gut passt das Angebot zur Anfrage? Art und Menge des Gegenstands (markenneutral), Lieferzeit und Vollständigkeit des Angebots (Preisbasis, Spezifikation, Bindefrist).",
-        "col_references_basis": "Referenzen / Service: Grundlage",
-        "col_concept_basis": "Konzept / Qualität: Grundlage",
-        "help_basis": "KI: Vorschlag des Agenten mit Begründung. Kommission: Der Wert wurde von der Wertungskommission geändert.",
         "tag_agent": "KI",
-        "tag_committee": "Kommission (KI-Vorschlag {score})",
-        "tag_committee_only": "Kommission",
         "missing_score": "{bidder}: {criterion} – {reason}",
         "committee_confirm": "Die Wertungskommission hat die Punkte geprüft und bestätigt",
         "committee_confirm_help": "Vor der Wertung erforderlich. Die Kommission bleibt für jede Bewertung verantwortlich, auch für die vom Agenten vorgeschlagenen.",
@@ -563,15 +624,11 @@ TRANSLATIONS = {
         "breakdown_required": "erforderlich: {reason}",
         "breakdown_committee": "Wert der Kommission: {score}",
         "col_bidder": "Bieter",
-        "col_item": "Artikel",
-        "col_quantity": "Menge",
         "col_price": "Preis (EUR)",
-        "col_price_basis": "Preisbasis",
         "col_delivery_days": "Lieferzeit (Tage)",
         "col_warranty_months": "Garantie (Monate)",
         "col_references": "Referenzen / Service (0-10)",
         "col_concept": "Konzept / Qualität (0-10)",
-        "col_evidence": "Fundstelle in der PDF",
         "col_score": "{criterion} (0-10)",
         "col_points": "{criterion}-Pkt.",
         "col_total_pts": "Gesamt-Pkt.",
@@ -583,17 +640,12 @@ TRANSLATIONS = {
         "missing_bidder": "Zeile {row}: Bietername erforderlich",
         "eval_bids_btn": "Wertung starten",
         "invalid_price_error": "Jeder Angebotspreis muss größer als 0 EUR sein. Bitte korrigieren: {bidders}",
-        "spinner_bids": "Gewichtete Wertung wird berechnet und Absageschreiben nach § 13 UVgO werden erstellt...",
-        "winner_label": "Empfohlener Zuschlag",
+        "spinner_bids": "Gewichtete Wertung wird berechnet...",
+        "winner_label": "Empfohlener Bieter",
         "winner_points": "Gesamtpunkte (von 100)",
         "winner_price": "Angebotspreis",
         "winner_lead": "Vorsprung auf Platz 2",
         "matrix_header": "Wertungsmatrix",
-        "rejections_header": "Ablehnungsbegründungen (§ 13 UVgO)",
-        "rejection_title": "{bidder} · {price} · {points} Punkte",
-        "no_reason": "Keine Begründung vorhanden.",
-        "letter_error": "Das Absageschreiben für {bidder} konnte nicht erstellt werden: {error}",
-        "retry_letters_btn": "Absageschreiben erneut erstellen",
     },
 }
 
@@ -942,6 +994,28 @@ def submit_request(text: str, source: str) -> Optional[str]:
 # ------------------------------------------------------------------------------
 
 
+MANUAL_FILES = {
+    "DE": Path(__file__).parent / "docs" / "Benutzerhandbuch.pdf",
+    "EN": Path(__file__).parent / "docs" / "User_Manual.pdf",
+}
+DIAGRAM_DIR = Path(__file__).parent / "docs" / "manual" / "diagrams"
+
+
+@st.cache_data(show_spinner=False)
+def _read_pdf(path: str, modified: float) -> bytes:
+    return Path(path).read_bytes()
+
+
+def manual_pdf(lang: str) -> Optional[bytes]:
+    """The user manual for the UI language, or None if it is missing or not a PDF."""
+    path = MANUAL_FILES.get(lang)
+    try:
+        data = _read_pdf(str(path), path.stat().st_mtime)
+    except (OSError, AttributeError):
+        return None
+    return data if data.startswith(b"%PDF") else None
+
+
 def history_path() -> Path:
     return Path(get_db_path()).resolve().parent / "history.json"
 
@@ -959,7 +1033,8 @@ def build_tender_entry(
     agent_reasons: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """One bid evaluation run: every bidder with the agent's proposal and the final (committee)
-    score per criterion, plus the agent's reasons where it proposed a committee criterion."""
+    score per criterion, plus the agent's reasons where it proposed a committee criterion.
+    Item, quantity and email feed the letters, which build_letters() adds once per bidder."""
     weights = result["weights"]
     bidders = []
     for rank, bid in enumerate(result["ranked_bids"], start=1):
@@ -969,7 +1044,9 @@ def build_tender_entry(
                 "price": bid["price"],
                 "rank": rank,
                 "total_points": bid["total_points"],
-                "status": "winner" if rank == 1 else ("failed" if bid.get("letter_error") else "generated"),
+                "item": bid.get("item"),
+                "quantity": bid.get("quantity"),
+                "email": bid.get("email"),
                 "scores": {
                     key: {
                         "agent": agent_scores.get(bid["bidder"], {}).get(key),
@@ -981,7 +1058,10 @@ def build_tender_entry(
                 },
             }
         )
-    return {"id": uuid4().hex, "ref": ref, "title": title, "evaluated_at": evaluated_at, "weights": weights, "bidders": bidders}
+    return {
+        "id": uuid4().hex, "ref": ref, "title": title, "evaluated_at": evaluated_at, "weights": weights,
+        "bidders": bidders, "award_approved": False, "approved_at": None,
+    }
 
 
 def seed_tender_entry() -> Dict[str, Any]:
@@ -990,7 +1070,43 @@ def seed_tender_entry() -> Dict[str, Any]:
     # Only the price is derived from the bids; references and concept are committee scores
     agent_price = score_criterion("price", [b["price"] for b in bids], [b["bidder"] for b in bids])
     agent_scores = {b["bidder"]: {"price": round(score, 2)} for b, score in zip(bids, agent_price)}
-    return build_tender_entry(SEED_TENDER["ref"], SEED_TENDER["title"], SEED_TENDER["evaluated_at"], result, agent_scores)
+    entry = build_tender_entry(SEED_TENDER["ref"], SEED_TENDER["title"], SEED_TENDER["evaluated_at"], result, agent_scores)
+    # A completed procurement: award approved, letters generated and all sent
+    build_letters(entry, SEED_TENDER["evaluated_at"])
+    entry["award_approved"], entry["approved_at"] = True, SEED_TENDER["approved_at"]
+    for bidder in entry["bidders"]:
+        bidder["letter"]["sent_at"] = (
+            SEED_TENDER["award_sent_at"] if bidder["rank"] == 1 else SEED_TENDER["rejections_sent_at"]
+        )
+    return entry
+
+
+def supplier_email(name: Optional[str]) -> Optional[str]:
+    """The supplier table's address for a bidder name (PDF ligatures normalised)."""
+    return check_supplier(unicodedata.normalize("NFKC", name or "")).get("email")
+
+
+def complete_tender_runs(data: Dict[str, Any]) -> bool:
+    """Adds stored letters to runs saved before letters were stored. The demo tender is re-seeded;
+    other runs get the supplier table's addresses and their letters generated once. Returns
+    True if anything changed."""
+    changed = False
+    for index, run in enumerate(data["tenders"]):
+        if all("letter" in b for b in run["bidders"]):
+            continue
+        changed = True
+        if run.get("ref") == SEED_TENDER["ref"]:
+            data["tenders"][index] = seed_tender_entry()
+            continue
+        for bidder in run["bidders"]:
+            bidder["email"] = bidder.get("email") or supplier_email(bidder["bidder"])
+        sent = {b["rank"]: b.pop("sent_at", None) for b in run["bidders"]}
+        build_letters(run, run["evaluated_at"])
+        for bidder in run["bidders"]:
+            bidder["letter"]["sent_at"] = sent.get(bidder["rank"])
+        run.setdefault("award_approved", False)
+        run.setdefault("approved_at", None)
+    return changed
 
 
 def historical_request_entries() -> List[Dict[str, Any]]:
@@ -1039,6 +1155,8 @@ def load_history() -> Dict[str, Any]:
             for entry in data["requests"]:
                 if "supplier" not in entry and entry.get("ref") in seeded:
                     entry["supplier"] = seeded[entry["ref"]]
+            if complete_tender_runs(data):
+                history_path().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
             return data
     except (OSError, ValueError, AttributeError):
         pass
@@ -1633,29 +1751,168 @@ def render_request_history() -> None:
                 st.markdown(f"**{t('history_justification')}:** {entry['override_reason']}")
 
 
-def tender_table(run: Dict[str, Any]) -> pd.DataFrame:
-    rows = []
-    for bidder in run["bidders"]:
-        row = {
-            t("col_rank"): bidder["rank"],
-            t("col_bidder"): bidder["bidder"],
-            t("col_price"): fmt_eur(bidder["price"]),
-        }
-        for key in run["weights"]:
-            label = t(f"crit_{key}")
-            scores = bidder["scores"].get(key, {})
-            if CRITERIA[key]["kind"] == "committee" and scores.get("agent") is None:
-                agent = t("not_proposed")
-            elif scores.get("agent") is None:
-                agent = t("not_extracted")
-            else:
-                agent = f"{scores['agent']:.2f}"
-            row[t("col_agent_score").format(criterion=label)] = agent
-            row[t("col_committee_score").format(criterion=label)] = f"{scores.get('committee', 0):.2f}"
-        row[t("col_total_pts")] = f"{bidder['total_points']:.2f}"
-        row[t("col_status")] = t(f"status_{bidder['status']}")
-        rows.append(row)
-    return pd.DataFrame(rows)
+def letter_sent_at(bidder: Dict[str, Any]) -> Optional[str]:
+    return (bidder.get("letter") or {}).get("sent_at")
+
+
+def bidder_status(bidder: Dict[str, Any]) -> str:
+    sent = letter_sent_at(bidder)
+    if bidder["rank"] == 1:
+        return t("status_award_sent").format(when=fmt_dt(sent)) if sent else t("status_recommended")
+    return t("status_rejection_sent").format(when=fmt_dt(sent)) if sent else t("status_not_selected")
+
+
+def find_run(run_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    return next((r for r in history()["tenders"] if r["id"] == run_id), None)
+
+
+def find_bidder(run_id: str, rank: int) -> Optional[Dict[str, Any]]:
+    run = find_run(run_id)
+    return next((b for b in run["bidders"] if b["rank"] == rank), None) if run else None
+
+
+def set_award_approved(run_id: str, key: str) -> None:
+    run = find_run(run_id)
+    if run is not None:
+        run["award_approved"] = bool(st.session_state[key])
+        run["approved_at"] = datetime.now().isoformat(timespec="seconds") if run["award_approved"] else None
+        save_history()
+
+
+def set_sent(run_id: str, rank: int, key: str) -> None:
+    bidder = find_bidder(run_id, rank)
+    if bidder is not None:
+        bidder["letter"]["sent_at"] = datetime.now().isoformat(timespec="seconds") if st.session_state[key] else None
+        save_history()
+
+
+def set_email(run_id: str, rank: int, key: str) -> None:
+    bidder = find_bidder(run_id, rank)
+    if bidder is not None:
+        address = (st.session_state[key] or "").strip() or None
+        bidder["email"] = bidder["letter"]["to"] = address
+        save_history()
+
+
+def render_approval(run: Dict[str, Any], place: str) -> None:
+    """The award approval checkbox. Its state always mirrors the stored run, so approving on the
+    Bid Evaluation page and in the history stays in sync. The approval unlocks all emails; until
+    then one caption under the checkbox says so (not one per row)."""
+    key = f"{place}_approved_{run['id']}"
+    st.session_state[key] = bool(run.get("award_approved"))
+    st.checkbox(
+        t("award_approval"),
+        key=key,
+        help=t("award_approval_help"),
+        on_change=set_award_approved,
+        args=(run["id"], key),
+    )
+    if not run.get("award_approved"):
+        st.caption(t("lock_approval"))
+
+
+def render_email_actions(run: Dict[str, Any], bidder: Dict[str, Any], place: str, compact: bool = False) -> None:
+    """Email button for the stored letter, an address input if it is missing, and "Mark as sent"
+    (status only: it never locks or unlocks a button).
+
+    compact (history): "Send" for an unsent letter, the sent date and "Open again" for a sent one.
+    """
+    lang = st.session_state["lang"]
+    letter = stored_letter(bidder, lang)
+    mail = email_body(letter, lang)
+    to = bidder["letter"].get("to")
+    reasons = email_lock_reasons(run, bidder)
+    sent = bidder["letter"].get("sent_at")
+    widget = f"{place}_{run['id']}_{bidder['rank']}"
+    is_award = bidder["rank"] == 1
+
+    if compact and sent:
+        st.caption(t("sent_on").format(when=fmt_dt(sent)))
+    label = t("email_btn") if not compact else (t("email_reopen") if sent else t("email_send"))
+    st.link_button(
+        label,
+        mailto_url(to, letter["subject"], mail["body"]) if not reasons else "mailto:",
+        type="primary" if is_award and not sent else "secondary",
+        disabled=bool(reasons),
+        help=t("award_approval_help") if is_award else t("rejection_email_help"),
+        width="stretch",
+    )
+    # Missing approval is explained once under the approval checkbox; a missing address per row
+    if "email_missing" in reasons:
+        st.caption(t("lock_email_missing"))
+        email_key = f"email_{widget}"
+        st.text_input(
+            t("email_input"), key=email_key, placeholder="name@firma.example", label_visibility="collapsed",
+            on_change=set_email, args=(run["id"], bidder["rank"], email_key),
+        )
+    if reasons:
+        return
+    if not compact:
+        st.markdown(f"[{t('gmail_link')}]({gmail_url(to, letter['subject'], mail['body'])})")
+        if mail["shortened"]:
+            st.caption(t("letter_shortened"))
+            st.download_button(
+                t("letter_pdf"),
+                letter_pdf(letter),
+                file_name=f"{'Zuschlag' if is_award else 'Absage'}_{bidder['bidder']}.pdf".replace(" ", "_"),
+                mime="application/pdf",
+                key=f"pdf_{widget}",
+            )
+    sent_key = f"sent_{widget}"
+    st.session_state[sent_key] = bool(sent)
+    st.checkbox(t("mark_sent"), key=sent_key, on_change=set_sent, args=(run["id"], bidder["rank"], sent_key))
+
+
+def render_letters(run: Dict[str, Any]) -> None:
+    """One row per bidder: the stored letter (expander) and the email actions on the right.
+    The approval checkbox sits directly above the award row."""
+    lang = st.session_state["lang"]
+    for bidder in sorted(run["bidders"], key=lambda b: b["rank"]):
+        is_award = bidder["rank"] == 1
+        if is_award:
+            render_approval(run, "bids")
+        letter = stored_letter(bidder, lang)
+        title = t("letter_title").format(
+            bidder=bidder["bidder"],
+            kind=t("letter_award" if is_award else "letter_rejection"),
+            status=bidder_status(bidder),
+        )
+        letter_col, action_col = st.columns([5, 1.5])
+        with letter_col:
+            with st.expander(title):
+                to = bidder["letter"].get("to")
+                st.caption(f"{t('letter_to')}: {to or t('no_email')} · {t('letter_subject')}: {letter['subject']}")
+                st.markdown(html.escape(letter["body"]).replace("\n", "  \n"))
+        with action_col:
+            render_email_actions(run, bidder, "bids")
+
+
+HISTORY_WIDTHS = {"rank": 0.45, "bidder": 1.9, "price": 1.15, "score": 0.95, "total": 0.8, "status": 1.5, "email": 1.6}
+
+
+def render_history_rows(run: Dict[str, Any]) -> None:
+    """The run as rows of columns (fits the dialog): one final value per criterion, the status
+    and per row the email action for the stored letter."""
+    keys = list(run["weights"])
+    widths = [HISTORY_WIDTHS[c] for c in ("rank", "bidder", "price")] + [HISTORY_WIDTHS["score"]] * len(keys) + [
+        HISTORY_WIDTHS[c] for c in ("total", "status", "email")
+    ]
+    headers = [t("col_rank"), t("col_bidder"), t("col_price"), *(t(f"short_{k}") for k in keys),
+               t("col_total_pts"), t("col_status"), t("col_email")]
+    for column, header in zip(st.columns(widths, vertical_alignment="bottom"), headers):
+        # Allow a line break after "/" ("Concept/Quality") instead of inside a word
+        column.caption(f"**{header.replace('/', '/' + chr(0x200B))}**")
+    for bidder in sorted(run["bidders"], key=lambda b: b["rank"]):
+        with st.container(border=True):
+            cells = st.columns(widths, vertical_alignment="center")
+            strong = "**" if bidder["rank"] == 1 else ""
+            values = [str(bidder["rank"]), f"{strong}{bidder['bidder']}{strong}", fmt_eur(bidder["price"]),
+                      *(f"{bidder['scores'].get(k, {}).get('committee', 0):.2f}" for k in keys),
+                      f"{strong}{bidder['total_points']:.2f}{strong}", bidder_status(bidder)]
+            for cell, value in zip(cells, values):
+                cell.markdown(value)
+            with cells[-1]:
+                render_email_actions(run, bidder, "hist", compact=True)
 
 
 def render_bid_history() -> None:
@@ -1668,7 +1925,6 @@ def render_bid_history() -> None:
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for run in runs:
         groups.setdefault(run["ref"], []).append(run)
-    rank_col = t("col_rank")
     for index, (ref, tender_runs) in enumerate(groups.items()):
         latest = tender_runs[0]
         title = f"{ref} · {localized(latest['title'])} · {fmt_dt(latest['evaluated_at'])}"
@@ -1678,11 +1934,10 @@ def render_bid_history() -> None:
                 st.caption(t("tender_run").format(when=fmt_dt(run["evaluated_at"]), criteria=criteria))
                 winner = next(b for b in run["bidders"] if b["rank"] == 1)
                 st.markdown(f"{t('winner_label')}: **{winner['bidder']}** ({winner['total_points']:.2f} / 100)")
-                styled = tender_table(run).style.apply(
-                    lambda row: ["background-color: #E0E7FF; font-weight: 600" if row[rank_col] == 1 else "" for _ in row],
-                    axis=1,
-                )
-                st.dataframe(styled, hide_index=True, width="stretch")
+                # Not approved yet: the award can be approved later from here
+                if not run.get("award_approved"):
+                    render_approval(run, "hist")
+                render_history_rows(run)
 
 
 def open_history_dialog(view: str) -> None:
@@ -1738,6 +1993,18 @@ with st.sidebar:
             st.rerun()
         except Exception as e:
             st.error(t("reset_error").format(error=e))
+
+    # User manual (built by scripts/build_manual.py) in the UI language; hidden if not built yet
+    manual = manual_pdf(st.session_state["lang"])
+    if manual is not None:
+        st.download_button(
+            t("manual_btn"),
+            manual,
+            file_name=MANUAL_FILES[st.session_state["lang"]].name,
+            mime="application/pdf",
+            key="manual_btn",
+            width="stretch",
+        )
 
 
 current_view = st.session_state["current_view"]
@@ -1966,136 +2233,100 @@ elif current_view == "bids":
         lang = st.session_state["lang"]
         score_keys = [key for key in CRITERIA if CRITERIA[key]["kind"] == "committee"]
 
-        bid_columns = ["bidder", "item", "quantity", "price", "price_basis", "delivery_days", "warranty_months",
-                       "references_score", "references_basis", "concept_score", "concept_basis", "evidence"]
-        editable_columns = ["bidder", "price", "delivery_days", "warranty_months", "references_score", "concept_score"]
+        bid_columns = ["bidder", "price", "delivery_days", "warranty_months", "references_score", "concept_score"]
+        editable_columns = list(bid_columns)
         rows = []
         for file_key in row_keys:
-            extraction = extractions[file_key]
-            bid = extraction["bid"]
-            snippets = " | ".join(dict.fromkeys(bid["sources"].values())) or t("evidence_none")
+            bid = extractions[file_key]["bid"]
             rows.append(
                 {
                     "bidder": bid["bidder"],
-                    "item": bid["item"],
-                    "quantity": bid["quantity"],
                     "price": bid["price"],
-                    "price_basis": t(f"basis_{bid['price_basis']}") if bid["price_basis"] else None,
                     "delivery_days": bid["delivery_days"],
                     "warranty_months": bid["warranty_months"],
                     "references_score": proposals[file_key]["references"]["score"],
-                    "references_basis": None,
                     "concept_score": proposals[file_key]["concept"]["score"],
-                    "concept_basis": None,
-                    "evidence": f"{extraction['file']}: {snippets}",
                 }
             )
         # Values exactly as read from the PDFs and proposed by the agent (used for the history)
         extracted_df = pd.DataFrame(rows, columns=bid_columns, index=row_keys)
-        for numeric in ("quantity", "price", "delivery_days", "warranty_months", "references_score", "concept_score"):
+        for numeric in ("price", "delivery_days", "warranty_months", "references_score", "concept_score"):
             extracted_df[numeric] = pd.to_numeric(extracted_df[numeric], errors="coerce")
-
-        files_hash = hashlib.sha1("|".join(row_keys).encode()).hexdigest()[:12]
-        editor_key = f"bid_editor_{st.session_state['bid_upload_nonce']}_{files_hash}"
-        # The edit just made in the table is already in the widget state; apply it before
-        # rendering so the AI / Committee marker matches the value shown
-        pending_edits = (st.session_state.get(editor_key) or {}).get("edited_rows", {})
-        for position, changes in pending_edits.items():
-            if int(position) < len(row_keys):
-                bid_edits.setdefault(row_keys[int(position)], {}).update(
-                    {c: v for c, v in changes.items() if c in editable_columns}
-                )
         # Committee entries and corrections survive when other files are added or removed
         table_df = extracted_df.copy()
         for file_key in row_keys:
             for column, value in bid_edits.get(file_key, {}).items():
                 table_df.at[file_key, column] = value
 
-        def score_basis(proposal: Dict[str, Any], value: Any) -> str:
-            proposed = proposal["score"]
-            if pd.isna(value):
-                reason = proposal["missing_reason"][lang] if proposal["missing_reason"] else ""
-                return f"{t('cell_missing')}: {reason}" if reason else t("cell_missing")
-            if proposed is not None and float(value) == float(proposed):
-                return f"{t('tag_agent')} · {explain(proposal, lang)}"
-            if proposed is None:
-                return t("tag_committee_only")
-            return f"{t('tag_committee').format(score=proposed)} · {explain(proposal, lang)}"
-
-        for file_key in row_keys:
-            for key in score_keys:
-                table_df.at[file_key, f"{key}_basis"] = score_basis(
-                    proposals[file_key][key], table_df.at[file_key, CRITERIA[key]["field"]]
-                )
-
         st.markdown(f"**{t('bids_table_header')}**")
         st.caption(t("bids_table_caption"))
+        files_hash = hashlib.sha1("|".join(row_keys).encode()).hexdigest()[:12]
         committee_confirmed = st.checkbox(
             t("committee_confirm"),
             key=f"committee_confirmed_{files_hash}",
             help=t("committee_confirm_help"),
             disabled=not tender_ready,
         )
-        criteria_fields = []
-        for key in active_criteria:
-            if key == "price":
-                continue
-            criteria_fields.append(CRITERIA[key]["field"])
-            if key in score_keys:
-                criteria_fields.append(f"{key}_basis")
+        criteria_fields = [CRITERIA[key]["field"] for key in active_criteria if key != "price"]
         bids_df = st.data_editor(
             table_df,
-            key=editor_key,
+            key=f"bid_editor_{st.session_state['bid_upload_nonce']}_{files_hash}",
             hide_index=True,
             width="stretch",
             placeholder=t("cell_missing"),
-            disabled=["item", "quantity", "price_basis", "references_basis", "concept_basis", "evidence"]
-            if tender_ready else True,
-            # Scores and their basis next to the bidder, so the proposal is visible without scrolling
-            column_order=["bidder", "price", *criteria_fields, "item", "quantity", "price_basis", "evidence"],
+            disabled=not tender_ready,
+            column_order=["bidder", "price", *criteria_fields],
             column_config={
-                "bidder": st.column_config.TextColumn(t("col_bidder"), required=True, pinned=True),
-                "item": st.column_config.TextColumn(t("col_item")),
-                "quantity": st.column_config.NumberColumn(t("col_quantity"), format="%d"),
+                "bidder": st.column_config.TextColumn(t("col_bidder"), required=True),
                 "price": st.column_config.NumberColumn(t("col_price"), min_value=0.0, format="%.2f"),
-                "price_basis": st.column_config.TextColumn(t("col_price_basis")),
                 "delivery_days": st.column_config.NumberColumn(t("col_delivery_days"), min_value=0, step=1),
                 "warranty_months": st.column_config.NumberColumn(t("col_warranty_months"), min_value=0, step=1),
                 "references_score": st.column_config.NumberColumn(
                     t("col_references"), min_value=0, max_value=10, step=1, help=t("help_references")
                 ),
-                "references_basis": st.column_config.TextColumn(
-                    t("col_references_basis"), width="medium", help=t("help_basis")
-                ),
                 "concept_score": st.column_config.NumberColumn(
                     t("col_concept"), min_value=0, max_value=10, step=1, help=t("help_concept")
                 ),
-                "concept_basis": st.column_config.TextColumn(t("col_concept_basis"), width="medium", help=t("help_basis")),
-                "evidence": st.column_config.TextColumn(t("col_evidence"), width="large"),
             },
         )
         for file_key, row in bids_df.iterrows():
             bid_edits[file_key] = {c: (None if pd.isna(row[c]) else row[c]) for c in editable_columns}
+        # Email per bid: from the PDF, otherwise from the supplier table. A missing address is
+        # asked for in the letters section, not here.
+        bid_emails = {
+            file_key: extractions[file_key]["bid"].get("email")
+            or supplier_email(row["bidder"] if pd.notna(row["bidder"]) else None)
+            or supplier_email(extractions[file_key]["bid"]["bidder"])
+            for file_key, row in bids_df.iterrows()
+        }
 
-        # Full breakdown of the agent's proposal, per bidder
+        # Agent breakdown and the source text per bidder (details behind the table)
         active_score_keys = [key for key in score_keys if key in active_criteria]
-        if active_score_keys:
-            with st.expander(t("breakdown_header")):
-                for file_key, row in bids_df.iterrows():
-                    st.markdown(f"**{row['bidder'] or extractions[file_key]['file']}**")
-                    lines = []
-                    for key in active_score_keys:
-                        proposal = proposals[file_key][key]
-                        value = row[CRITERIA[key]["field"]]
-                        if proposal["score"] is None:
-                            line = f"- {t(f'crit_{key}')}: {t('breakdown_required').format(reason=proposal['missing_reason'][lang])}"
-                        else:
-                            line = (f"- {t(f'crit_{key}')}: **{proposal['score']:g}** ({t('tag_agent')}) – "
-                                    f"{explain(proposal, lang)}")
-                        if pd.notna(value) and (proposal["score"] is None or float(value) != float(proposal["score"])):
-                            line += f" · {t('breakdown_committee').format(score=f'{float(value):g}')}"
-                        lines.append(line)
-                    st.markdown("\n".join(lines))
+        with st.expander(t("breakdown_header")):
+            for file_key, row in bids_df.iterrows():
+                bid = extractions[file_key]["bid"]
+                st.markdown(f"**{row['bidder'] or extractions[file_key]['file']}**")
+                lines = []
+                for key in active_score_keys:
+                    proposal = proposals[file_key][key]
+                    value = row[CRITERIA[key]["field"]]
+                    if proposal["score"] is None:
+                        line = f"- {t(f'crit_{key}')}: {t('breakdown_required').format(reason=proposal['missing_reason'][lang])}"
+                    else:
+                        line = (f"- {t(f'crit_{key}')}: **{proposal['score']:g}** ({t('tag_agent')}) – "
+                                f"{explain(proposal, lang)}")
+                    if pd.notna(value) and (proposal["score"] is None or float(value) != float(proposal["score"])):
+                        line += f" · {t('breakdown_committee').format(score=f'{float(value):g}')}"
+                    lines.append(line)
+                lines.append("- " + t("breakdown_offer").format(
+                    item=bid["item"] or "–",
+                    quantity=bid["quantity"] or "–",
+                    basis=t(f"basis_{bid['price_basis']}") if bid["price_basis"] else "–",
+                    email=bid_emails[file_key] or "–",
+                ))
+                snippets = " | ".join(dict.fromkeys(bid["sources"].values())) or "–"
+                lines.append("- " + t("breakdown_sources").format(text=f"{extractions[file_key]['file']}: {snippets}"))
+                st.markdown("\n".join(lines))
 
         # --- Validation: nothing is defaulted; missing values block the evaluation --------
         bids_input, bid_file_keys, problems, invalid_prices = [], [], [], []
@@ -2104,7 +2335,13 @@ elif current_view == "bids":
             bidder = str(row["bidder"]).strip() if pd.notna(row["bidder"]) else ""
             if not bidder:
                 problems.append(t("missing_bidder").format(row=row_number))
-            bid = {"bidder": bidder or f"#{row_number}"}
+            extracted_bid = extractions[file_key]["bid"]
+            bid = {
+                "bidder": bidder or f"#{row_number}",
+                "item": extracted_bid["item"],
+                "quantity": extracted_bid["quantity"],
+                "email": bid_emails[file_key],
+            }
             missing = []
             for key in required_criteria:
                 field = CRITERIA[key]["field"]
@@ -2176,6 +2413,9 @@ elif current_view == "bids":
                         agent_scores,
                         agent_reasons,
                     )
+                    # The letters are generated once and stored with the run (what is sent later
+                    # is exactly this text)
+                    build_letters(entry, entry["evaluated_at"])
                     history()["tenders"].append(entry)
                     save_history()
                     result["history_id"] = entry["id"]
@@ -2224,33 +2464,11 @@ elif current_view == "bids":
             column_config=matrix_config,
         )
 
-        st.subheader(t("rejections_header"))
-        failed_losers = [loser for loser in losers if loser.get("letter_error")]
-        if failed_losers and st.button(t("retry_letters_btn"), key="retry_letters_btn"):
-            with st.spinner(t("spinner_bids")):
-                generate_rejection_letters(winner, failed_losers, result_weights or None)
-            for run in history()["tenders"]:
-                if run["id"] == res.get("history_id"):
-                    letter_failed = {loser["bidder"] for loser in losers if loser.get("letter_error")}
-                    for bidder in run["bidders"]:
-                        if bidder["status"] != "winner":
-                            bidder["status"] = "failed" if bidder["bidder"] in letter_failed else "generated"
-            save_history()
-            st.rerun()
-
-        for loser in losers:
-            title = t("rejection_title").format(
-                bidder=loser["bidder"],
-                price=fmt_eur(loser["price"]),
-                points=loser["total_points"],
-            )
-            with st.expander(title):
-                if loser.get("letter_error"):
-                    st.error(t("letter_error").format(bidder=loser["bidder"], error=loser["letter_error"]))
-                elif loser.get("legal_justification"):
-                    st.markdown(loser["legal_justification"])
-                else:
-                    st.caption(t("no_reason"))
+        st.subheader(t("letters_header"))
+        st.caption(t("letters_caption"))
+        run = find_run(res.get("history_id"))
+        if run is not None:
+            render_letters(run)
 
     if st.session_state.get("history_view") == "bids":
         open_history_dialog("bids")
@@ -2262,6 +2480,11 @@ elif current_view == "bids":
 
 elif current_view == "insights":
     st.caption(t("insights_desc"))
+    # The end-to-end overview from the user manual (docs/manual/diagrams), if it has been built
+    overview = DIAGRAM_DIR / f"1_overview_{st.session_state['lang'].lower()}.png"
+    if overview.exists():
+        with st.expander(t("how_it_works")):
+            st.image(str(overview), caption=t("how_it_works_caption"))
     lines = get_budget_lines()
     approvals = get_approved_spending()
 

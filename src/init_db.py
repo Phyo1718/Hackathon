@@ -44,7 +44,8 @@ def init_db():
     CREATE TABLE Suppliers (
         Name TEXT PRIMARY KEY,
         Is_Approved INTEGER NOT NULL,
-        Category TEXT NOT NULL
+        Category TEXT NOT NULL,
+        Email TEXT
     );
     """)
 
@@ -94,17 +95,18 @@ def init_db():
         ],
     )
 
-    # Approved suppliers and one deliberately blocked supplier for the demo
+    # Approved suppliers and one deliberately blocked supplier for the demo. Email addresses use
+    # the reserved .example domain only, so no real company is emailed during a demo.
     suppliers = [
-        ("Bechtle GmbH", 1, "IT-Ausstattung"),
-        ("Dell Technologies", 1, "IT-Ausstattung"),
-        ("Cancom SE", 1, "IT-Ausstattung"),
-        ("Stadtwerke Hildesheim", 1, "Fahrzeuge"),
-        ("OfficeDepot Deutschland", 1, "Büromaterial"),
-        ("TechCorp", 0, "IT-Ausstattung"),
+        ("Bechtle GmbH", 1, "IT-Ausstattung", "vergabe@bechtle.example"),
+        ("Dell Technologies", 1, "IT-Ausstattung", "angebote@dell.example"),
+        ("Cancom SE", 1, "IT-Ausstattung", "vertrieb@cancom.example"),
+        ("Stadtwerke Hildesheim", 1, "Fahrzeuge", "einkauf@stadtwerke-hildesheim.example"),
+        ("OfficeDepot Deutschland", 1, "Büromaterial", "vertrieb@officedepot.example"),
+        ("TechCorp", 0, "IT-Ausstattung", "info@techcorp.example"),
     ]
     cursor.executemany(
-        "INSERT INTO Suppliers (Name, Is_Approved, Category) VALUES (?, ?, ?);",
+        "INSERT INTO Suppliers (Name, Is_Approved, Category, Email) VALUES (?, ?, ?, ?);",
         suppliers,
     )
 

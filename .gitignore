@@ -5,3 +5,6 @@ __pycache__/
 *.sqlite
 # Demo history written by the app
 data/*.json
+
+# Build tooling for the user manual (scripts/build_manual.py)
+scripts/manual/node_modules/

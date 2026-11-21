@@ -1,0 +1,30 @@
+%% Bid Evaluation: agent proposal, committee confirmation
+flowchart TB
+  classDef agent fill:#DBEAFE,stroke:#2563EB,stroke-width:1.5px,color:#0F172A
+  classDef human fill:#1E3A8A,stroke:#1E3A8A,color:#FFFFFF,font-weight:bold
+  classDef doc fill:#F1F5F9,stroke:#64748B,color:#0F172A
+  classDef locked fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:6 4,color:#475569
+  classDef step fill:#FFFFFF,stroke:#94A3B8,color:#0F172A
+
+  S1["Select the approved request,<br/>weights (total 100 %),<br/>upload the bids as PDF"]:::step
+  A1("AI · Extract data,<br/>propose scores with a fixed rubric"):::agent
+  Q{"AI · Evidence<br/>found?"}:::agent
+  H1["👤 Committee enters only<br/>the missing values"]:::human
+  H2["👤 Committee reviews, edits<br/>and confirms the scores"]:::human
+  L1["Run Evaluation<br/>(locked until confirmed)"]:::locked
+  A2("AI · Ranking and price points<br/>(formula from Auswertung_Hackathon.XLSX)"):::agent
+  D1@{ shape: doc, label: "Recommended supplier<br/>and scoring matrix" }
+
+  S1 --> A1 --> Q
+  Q -- no --> H1 --> H2
+  Q -- yes --> H2
+  H2 --> L1 --> A2 --> D1
+  class D1 doc
+
+  subgraph LEG["Legend"]
+    direction LR
+    G1("AI · Agent step"):::agent ~~~ G2["👤 Human decision"]:::human ~~~ G3@{ shape: doc, label: "Document / output" } ~~~ G4["Locked"]:::locked
+  end
+  class G3 doc
+  %% Keep the legend below the flow
+  D1 ~~~ LEG

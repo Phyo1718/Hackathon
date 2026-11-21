@@ -1,0 +1,36 @@
+%% Wer entscheidet was: der Agent bereitet vor, der Mensch entscheidet
+flowchart LR
+  classDef agent fill:#DBEAFE,stroke:#2563EB,stroke-width:1.5px,color:#0F172A
+  classDef human fill:#1E3A8A,stroke:#1E3A8A,color:#FFFFFF,font-weight:bold
+  classDef doc fill:#F1F5F9,stroke:#64748B,color:#0F172A
+  classDef locked fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:6 4,color:#475569
+  classDef step fill:#FFFFFF,stroke:#94A3B8,color:#0F172A
+
+  subgraph AG["AI · Agent bereitet vor"]
+    A1("1 Antrag: prüft Budget, Lieferant,<br/>Barrierefreiheit; empfiehlt"):::agent
+    A2("2 Budget: schlägt Haushaltsposition vor,<br/>füllt Deckungsantrag vor"):::agent
+    A3("3 Angebote: liest PDFs aus,<br/>schlägt Punkte vor"):::agent
+    A4("4 Wertung: berechnet Rangfolge<br/>und Preispunkte"):::agent
+    A5("5 Schreiben: erstellt Zuschlags-<br/>und Absageschreiben"):::agent
+    A6("6 Aufsicht: zählt Übereinstimmung<br/>und Abweichungen"):::agent
+  end
+  subgraph HU["👤 Mensch entscheidet"]
+    H1["👤 Genehmigt oder lehnt ab;<br/>Abweichung mit Begründung"]:::human
+    H2["👤 Unterschreibt den Antrag;<br/>Buchung nur mit Genehmigung"]:::human
+    H3["👤 Kommission prüft, ändert<br/>und bestätigt die Punkte"]:::human
+    H4["👤 Prüft das Ergebnis<br/>(Empfohlener Bieter)"]:::human
+    H5["👤 Zuschlag freigegeben;<br/>versendet die E-Mails"]:::human
+    H6["👤 Management prüft<br/>die Aufsicht über den Agenten"]:::human
+  end
+  A1 --> H1
+  A2 --> H2
+  A3 --> H3
+  A4 --> H4
+  A5 --> H5
+  A6 --> H6
+
+  subgraph LEG["Legende"]
+    direction LR
+    G1("AI · Agent-Schritt"):::agent ~~~ G2["👤 Entscheidung Mensch"]:::human ~~~ G3@{ shape: doc, label: "Dokument / Ausgabe" } ~~~ G4["Gesperrt"]:::locked
+  end
+  class G3 doc

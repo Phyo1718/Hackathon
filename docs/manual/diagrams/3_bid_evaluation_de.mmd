@@ -1,0 +1,30 @@
+%% Angebotswertung: Vorschlag des Agenten, Bestätigung durch die Kommission
+flowchart TB
+  classDef agent fill:#DBEAFE,stroke:#2563EB,stroke-width:1.5px,color:#0F172A
+  classDef human fill:#1E3A8A,stroke:#1E3A8A,color:#FFFFFF,font-weight:bold
+  classDef doc fill:#F1F5F9,stroke:#64748B,color:#0F172A
+  classDef locked fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:6 4,color:#475569
+  classDef step fill:#FFFFFF,stroke:#94A3B8,color:#0F172A
+
+  S1["Genehmigten Antrag wählen,<br/>Gewichtung (Summe 100 %),<br/>Angebote als PDF hochladen"]:::step
+  A1("AI · Daten auslesen,<br/>Punkte nach festem Raster vorschlagen"):::agent
+  Q{"AI · Grundlage<br/>vorhanden?"}:::agent
+  H1["👤 Kommission trägt nur<br/>die fehlenden Werte ein"]:::human
+  H2["👤 Kommission prüft, ändert<br/>und bestätigt die Punkte"]:::human
+  L1["Wertung starten<br/>(gesperrt bis bestätigt)"]:::locked
+  A2("AI · Rangfolge und Preispunkte<br/>(Formel aus Auswertung_Hackathon.XLSX)"):::agent
+  D1@{ shape: doc, label: "Empfohlener Bieter<br/>und Wertungsmatrix" }
+
+  S1 --> A1 --> Q
+  Q -- nein --> H1 --> H2
+  Q -- ja --> H2
+  H2 --> L1 --> A2 --> D1
+  class D1 doc
+
+  subgraph LEG["Legende"]
+    direction LR
+    G1("AI · Agent-Schritt"):::agent ~~~ G2["👤 Entscheidung Mensch"]:::human ~~~ G3@{ shape: doc, label: "Dokument / Ausgabe" } ~~~ G4["Gesperrt"]:::locked
+  end
+  class G3 doc
+  %% Keep the legend below the flow
+  D1 ~~~ LEG
