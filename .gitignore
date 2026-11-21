@@ -3,3 +3,5 @@
 __pycache__/
 *.db
 *.sqlite
+# Demo history written by the app
+data/*.json
