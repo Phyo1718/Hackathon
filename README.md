@@ -95,7 +95,7 @@ docker save procurement-assistant:amd64 | gzip > procurement-assistant-amd64.tar
 ```
 
 **What the image contains.**
-- Included: `app.py`, `src/`, the Streamlit theme, the two prebuilt user manuals (`docs/*.pdf`)
+- Included: `app.py`, `src/`, the Streamlit theme with its self-hosted fonts and illustrations (`static/`), the two prebuilt user manuals (`docs/*.pdf`)
   and the overview diagram. It runs as the non-root user `appuser` on Python 3.12.0.
 - Not included: tests, the manual build tooling (Chrome, Node, `scripts/`) and local data.
 - The manuals are rebuilt locally with `python scripts/build_manual.py`, then the image is

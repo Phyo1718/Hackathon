@@ -8,6 +8,7 @@ To reduce the workload of public administration caseworkers by automatically che
 ## 🏗️ Architecture & File Structure
 - `app.py`: The Streamlit frontend UI. Handles user input and displays the agent's output (including reasoning).
 - `src/agent.py`: The backend agent logic. It takes the user's request, queries the database, applies validation rules, and returns the decision.
+- `src/ui_theme.py`: Presentation only, imported by `app.py`: colour tokens, the global CSS (fonts, components, motion), small decorative HTML helpers (circle motif, illustrations, step numerals) and the Altair chart colours. No business logic. Its fonts and images are self-hosted in `static/` (served via `enableStaticServing` in `.streamlit/config.toml`).
 - `data/mock_data.db`: A SQLite database containing mock budgets and suppliers.
 - `.env`: Contains the `GEMINI_API_KEY`.
 

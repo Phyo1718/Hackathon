@@ -30,6 +30,8 @@ RUN useradd --create-home --uid 10001 appuser \
 COPY .streamlit/config.toml .streamlit/config.toml
 COPY app.py .
 COPY src/ src/
+# Self-hosted fonts and illustrations of the UI theme (served at app/static/, see .streamlit/config.toml)
+COPY static/ static/
 # Prebuilt user manuals (sidebar download) and the overview diagram (Management Insights)
 COPY docs/Benutzerhandbuch.pdf docs/User_Manual.pdf docs/
 COPY docs/manual/diagrams/1_overview_de.png docs/manual/diagrams/1_overview_en.png docs/manual/diagrams/

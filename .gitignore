@@ -8,3 +8,6 @@ data/*.json
 
 # Build tooling for the user manual (scripts/build_manual.py)
 scripts/manual/node_modules/
+
+# Local visual-check screenshots (never committed)
+.screenshots/
