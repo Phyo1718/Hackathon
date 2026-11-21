@@ -693,6 +693,22 @@ section[role="dialog"] > button[aria-label="Close"]:focus-visible { outline: 3px
   color: var(--hz-blue-ink); display: inline-block; vertical-align: middle;
 }
 
+/* ---------- Help assistant (ported from main): round button fixed at the bottom right ----------- */
+.st-key-help_chat { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 999; width: auto !important; }
+.st-key-help_chat button {
+  width: 3.5rem; height: 3.5rem; min-height: 3.5rem; border-radius: 50%; padding: 0;
+  background-color: var(--hz-blue-ink); border: none; color: #FFFFFF; font-size: 1.5rem;
+  box-shadow: 0 6px 18px rgba(7, 106, 137, .32);
+}
+.st-key-help_chat button:hover { background-color: #055A74; color: #FFFFFF; }
+.st-key-help_chat button[aria-expanded="true"], .st-key-help_chat button:focus, .st-key-help_chat button:active {
+  background-color: var(--hz-blue-ink); color: #FFFFFF;
+}
+.st-key-help_chat button p { font-size: 1.6rem; line-height: 1; }
+.st-key-help_chat button [data-testid="stIconMaterial"] { display: none; }  /* no dropdown chevron */
+[data-testid="stPopoverBody"]:has(.st-key-help_chat_panel) { width: 360px; max-width: calc(100vw - 2rem); }
+[data-testid="stMainBlockContainer"] { padding-bottom: 7rem; }  /* the help button never covers the last element */
+
 /* ---------- Startup gate ---------------------------------------------------------------------- */
 .st-key-hzgate { max-width: 760px; margin: 4vh auto 0; position: relative; }
 .st-key-hzgate [data-testid="stAlertContainer"] { box-shadow: var(--hz-shadow-lift); }

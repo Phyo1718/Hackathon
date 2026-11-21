@@ -28,6 +28,12 @@ cp .env.example .env          # then set GEMINI_API_KEY=<your key> in .env
 streamlit run app.py
 ```
 
+**Help assistant.** A chat button at the bottom right answers questions about using the app.
+It knows only the user manual (`docs/manual/user_manual_de.md` / `_en.md`) and the procurement
+steps from the challenge description (`docs/manual/process_steps_de.md`). It receives only the
+question, the chat history of the session and the name of the current page, and it cannot
+change anything. Set `ENABLE_CHAT=false` in `.env` to hide it.
+
 The SQLite database (`data/mock_data.db`) is created on first start. Use **Reset Demo Data**
 in the sidebar, or `python -m src.init_db`, to restore the seed data. Set
 `PROCUREMENT_DB_PATH` to use a different database file.

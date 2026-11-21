@@ -53,6 +53,7 @@ from src.agent import (  # noqa: E402
 )
 from src.bid_parser import BidExtractionError, parse_bid_pdf
 from src.checklist import STATUS_ICONS, verification_view
+from src.help_chat import HelpUnavailable, ask, chat_enabled
 from src.bid_scoring import explain, score_bid
 from src.letters import (
     build_letters,
@@ -180,6 +181,14 @@ TRANSLATIONS = {
         "live_state_caption": "Live data from the municipal budget database",
         "no_budget_data": "No budget data available.",
         "reset_btn": "Reset Demo Data",
+        "chat_button_help": "Help",
+        "chat_title": "Help assistant",
+        "chat_disclaimer": "Answers are based on the user manual. AI can make mistakes.",
+        "chat_placeholder": "Ask a question about this app ...",
+        "chat_clear": "Clear chat",
+        "chat_unavailable": "The help assistant is unavailable right now. See the user manual (sidebar).",
+        "chat_thinking": "Looking it up in the user manual ...",
+        "chat_starters": ["How do I override the agent?", "What do References / Service mean?", "Why is the email button disabled?"],
         "manual_btn": "📘 User manual",
         "menu_toggle": "Toggle menu",
         "how_it_works": "How it works",
@@ -515,6 +524,14 @@ TRANSLATIONS = {
         "live_state_caption": "Live-Daten aus der kommunalen Haushaltsdatenbank",
         "no_budget_data": "Keine Budgetdaten verfügbar.",
         "reset_btn": "Demo-Daten zurücksetzen",
+        "chat_button_help": "Hilfe",
+        "chat_title": "Hilfe-Assistent",
+        "chat_disclaimer": "Antworten beruhen auf dem Benutzerhandbuch. KI kann Fehler machen.",
+        "chat_placeholder": "Frage zur Anwendung stellen ...",
+        "chat_clear": "Chat leeren",
+        "chat_unavailable": "Der Hilfe-Assistent ist gerade nicht erreichbar. Siehe Benutzerhandbuch (Seitenleiste).",
+        "chat_thinking": "Suche im Benutzerhandbuch ...",
+        "chat_starters": ["Wie entscheide ich gegen den Agenten?", "Was bedeutet Referenzen / Service?", "Warum ist der E-Mail-Button gesperrt?"],
         "manual_btn": "📘 Benutzerhandbuch",
         "menu_toggle": "Menü ein-/ausblenden",
         "how_it_works": "So funktioniert der Assistent",
@@ -2982,3 +2999,57 @@ else:
                    icon=":material/check_circle:")
         st.button(t("go_verify_btn"), key="go_verify_btn", on_click=go_to, args=("verify",),
                   icon=":material/fact_check:")
+
+
+# ==============================================================================
+# HELP ASSISTANT (floating button on every page; ENABLE_CHAT=false hides it)
+# ==============================================================================
+
+
+def clear_help_chat() -> None:
+    st.session_state["help_chat_messages"] = []
+
+
+def render_help_chat(page: str) -> None:
+    """Chat panel answering questions from the user manual. It only receives the question,
+    this session's chat history and the page name; it cannot change anything in the app."""
+    messages = st.session_state.setdefault("help_chat_messages", [])
+    with st.container(key="help_chat"):
+        with st.popover("💬", help=t("chat_button_help")):
+            with st.container(key="help_chat_panel"):
+                st.markdown(f"**{t('chat_title')}**")
+                st.caption(t("chat_disclaimer"))
+                # Placeholders: the history appears only once there is a conversation, and the
+                # starter questions disappear in the same run as the first question
+                history_slot, starter_slot = st.empty(), st.empty()
+                starter = None
+                if not messages:
+                    with starter_slot.container():
+                        for index, text in enumerate(t("chat_starters")):
+                            if st.button(text, key=f"help_chat_starter_{index}", width="stretch"):
+                                starter = text
+                question = st.chat_input(t("chat_placeholder"), key="help_chat_input", max_chars=1000) or starter
+                if question:
+                    messages.append({"role": "user", "content": question})
+                    starter_slot.empty()
+                if messages:
+                    with history_slot.container(height=260, border=False):
+                        for message in messages:
+                            with st.chat_message(message["role"]):
+                                st.markdown(message["content"])
+                        if question:
+                            with st.chat_message("assistant"):
+                                try:
+                                    with st.spinner(t("chat_thinking")):
+                                        answer = {"role": "assistant", "content": ask(
+                                            question, messages[:-1], st.session_state["lang"], page)}
+                                except HelpUnavailable:
+                                    answer = {"role": "assistant", "content": t("chat_unavailable"), "error": True}
+                                st.markdown(answer["content"])
+                            messages.append(answer)
+                if messages:
+                    st.button(t("chat_clear"), key="help_chat_clear", type="tertiary", on_click=clear_help_chat)
+
+
+if chat_enabled():
+    render_help_chat(t(f"nav_{current_view}"))

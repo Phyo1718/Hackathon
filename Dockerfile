@@ -35,6 +35,8 @@ COPY static/ static/
 # Prebuilt user manuals (sidebar download) and the overview diagram (Management Insights)
 COPY docs/Benutzerhandbuch.pdf docs/User_Manual.pdf docs/
 COPY docs/manual/diagrams/1_overview_de.png docs/manual/diagrams/1_overview_en.png docs/manual/diagrams/
+# Knowledge of the help assistant (user manual text and the procurement process steps)
+COPY docs/manual/user_manual_de.md docs/manual/user_manual_en.md docs/manual/process_steps_de.md docs/manual/
 
 USER appuser
 EXPOSE 8501
