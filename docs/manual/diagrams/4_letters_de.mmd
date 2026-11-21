@@ -1,0 +1,29 @@
+%% Zuschlags- und Absageschreiben: Freigabe, Versand, Status
+flowchart TB
+  classDef agent fill:#DBEAFE,stroke:#2563EB,stroke-width:1.5px,color:#0F172A
+  classDef human fill:#1E3A8A,stroke:#1E3A8A,color:#FFFFFF,font-weight:bold
+  classDef doc fill:#F1F5F9,stroke:#64748B,color:#0F172A
+  classDef locked fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:6 4,color:#475569
+  classDef step fill:#FFFFFF,stroke:#94A3B8,color:#0F172A
+
+  A1("AI · Zuschlags- und Absageschreiben<br/>bei der Wertung erzeugt und gespeichert"):::agent
+  L1["✉ E-Mail-Buttons gesperrt"]:::locked
+  H1["👤 Zuschlag freigegeben<br/>(Freigabe erteilt)"]:::human
+  D1@{ shape: doc, label: "Zuschlagsschreiben<br/>an den empfohlenen Bieter" }
+  D2@{ shape: doc, label: "Absageschreiben (§ 46 UVgO)<br/>an alle anderen Bieter" }
+  H2["👤 E-Mail senden<br/>(beliebige Reihenfolge)"]:::human
+  H3["👤 Als versandt markieren"]:::human
+  S1["Status im Verlauf:<br/>Zuschlag versandt / Absage versandt"]:::step
+
+  A1 --> L1 --> H1
+  H1 --> D1 & D2
+  D1 & D2 --> H2 --> H3 --> S1
+  class D1,D2 doc
+
+  subgraph LEG["Legende"]
+    direction LR
+    G1("AI · Agent-Schritt"):::agent ~~~ G2["👤 Entscheidung Mensch"]:::human ~~~ G3@{ shape: doc, label: "Dokument / Ausgabe" } ~~~ G4["Gesperrt"]:::locked
+  end
+  class G3 doc
+  %% Keep the legend below the flow
+  S1 ~~~ LEG

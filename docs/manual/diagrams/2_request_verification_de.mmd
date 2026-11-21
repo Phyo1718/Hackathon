@@ -1,0 +1,31 @@
+%% Antragsprüfung: Empfehlung des Agenten, Entscheidung der Sachbearbeitung
+flowchart TB
+  classDef agent fill:#DBEAFE,stroke:#2563EB,stroke-width:1.5px,color:#0F172A
+  classDef human fill:#1E3A8A,stroke:#1E3A8A,color:#FFFFFF,font-weight:bold
+  classDef doc fill:#F1F5F9,stroke:#64748B,color:#0F172A
+  classDef locked fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:6 4,color:#475569
+  classDef step fill:#FFFFFF,stroke:#94A3B8,color:#0F172A
+
+  P1["Offenen Antrag öffnen<br/>(Antragsprüfung)"]:::step
+  A1("AI · Empfehlung:<br/>Regelkonform · Prüfung erforderlich ·<br/>Nicht regelkonform"):::agent
+  H1{"👤 Genehmigen<br/>oder Ablehnen?"}:::human
+  H2["👤 Begründung im Vermerk<br/>(mind. 15 Zeichen)"]:::human
+  S1["Im Antragsverlauf gespeichert,<br/>in der Aufsicht über den Agenten gezählt"]:::step
+  A2("AI · Budget reicht nicht:<br/>Haushaltsposition mit<br/>freien Mitteln vorschlagen"):::agent
+  D1@{ shape: doc, label: "Entwurf Deckungsantrag (PDF)" }
+  H3["👤 Antrag unterschrieben,<br/>Budgetverschiebung angehakt"]:::human
+  S2["Genehmigen: Budgets beider<br/>Positionen aktualisiert"]:::step
+
+  P1 --> A1 --> H1
+  H1 -- wie empfohlen --> S1
+  H1 -- gegen die Empfehlung --> H2 --> S1
+  A1 -. Budget reicht nicht .-> A2 --> D1 --> H3 --> S2 --> S1
+  class D1 doc
+
+  subgraph LEG["Legende"]
+    direction LR
+    G1("AI · Agent-Schritt"):::agent ~~~ G2["👤 Entscheidung Mensch"]:::human ~~~ G3@{ shape: doc, label: "Dokument / Ausgabe" } ~~~ G4["Gesperrt"]:::locked
+  end
+  class G3 doc
+  %% Keep the legend below the flow
+  S1 ~~~ LEG

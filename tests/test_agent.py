@@ -35,9 +35,6 @@ from src.agent import (
     get_budget_lines,
 )
 
-OLD_TEMPLATE_TEXT = "Gemäß § 13 UVgO wird Ihr Angebot nicht berücksichtigt"
-
-
 def mock_client_returning(text):
     client = MagicMock()
     client.models.generate_content.return_value = MagicMock(text=text)
@@ -68,6 +65,9 @@ class TestProcurementAgent(IsolatedTestCase):
         self.assertTrue(res_dell["exists"])
         self.assertTrue(res_dell["is_approved"])
         self.assertEqual(res_dell["category"], "IT-Ausstattung")
+        # Demo addresses only on the reserved .example domain
+        self.assertEqual(res_dell["email"], "angebote@dell.example")
+        self.assertIsNone(check_supplier("Unbekannt GmbH")["email"])
 
     def test_contract_extension(self):
         # Cancom SE has pre-existing audit history in init_db (demo order H01)
@@ -192,22 +192,6 @@ class TestProcurementAgent(IsolatedTestCase):
         self.assertEqual(res["weights"], {"price": 60.0, "delivery": 20.0, "warranty": 20.0})
         self.assertEqual(res["winner"]["bidder"], "Bechtle")
 
-    def test_rejection_letter_prompt_names_active_criteria(self):
-        self.set_dummy_api_key()
-        client = mock_client_returning("Absage")
-        with patch("src.agent.genai.Client", return_value=client):
-            evaluate_bids(
-                [
-                    {"bidder": "A", "price": 100.0, "delivery_days": 5, "warranty_months": 24},
-                    {"bidder": "B", "price": 120.0, "delivery_days": 10, "warranty_months": 12},
-                ],
-                CRITERIA_PRESETS["goods"],
-            )
-        prompt = client.models.generate_content.call_args.kwargs["contents"]
-        self.assertIn("Preis (60 %)", prompt)
-        self.assertIn("Lieferzeit (20 %)", prompt)
-        self.assertNotIn("30%", prompt)
-
     # --- Bid evaluation is only for approved requests -----------------------------------
 
     def test_requests_awaiting_bids_filter(self):
@@ -300,32 +284,21 @@ class TestProcurementAgent(IsolatedTestCase):
         self.assertNotIn("Freigabe durch die Sachbearbeitung erteilt", text)
         self.assertIn("Ort, Datum, Unterschrift Vergabestelle", text)
 
-    # --- Issue 4: letter failures do not break scoring ----------------------------------
+    # --- Bid evaluation: scores only, letters are templates (src/letters.py) -------------
 
-    def test_evaluate_bids_with_gemini_failure_still_returns_scores(self):
-        self.set_dummy_api_key()
-        with patch("src.agent.genai.Client", side_effect=RuntimeError("503 Service Unavailable")):
-            res = evaluate_bids([
-                {"bidder": "A", "price": 50000.0, "references_score": 8, "concept_score": 8},
-                {"bidder": "B", "price": 70000.0, "references_score": 10, "concept_score": 10},
-            ])
-        self.assertEqual(res["winner"]["bidder"], "A")
-        self.assertEqual(res["winner"]["total_points"], 87.5)
-        loser = res["losers"][0]
-        self.assertEqual(loser["total_points"], 85.0)
-        self.assertIsNone(loser["legal_justification"])
-        self.assertIn("503 Service Unavailable", loser["letter_error"])
-        self.assertNotIn(OLD_TEMPLATE_TEXT, str(res))
-
-    def test_evaluate_bids_without_api_key_sets_letter_error(self):
+    def test_evaluate_bids_needs_no_gemini_and_carries_letter_fields(self):
         with patch("src.agent.genai.Client") as client_cls:
             res = evaluate_bids([
-                {"bidder": "A", "price": 50000.0, "references_score": 8, "concept_score": 8},
+                {"bidder": "A", "price": 50000.0, "references_score": 8, "concept_score": 8,
+                 "item": "15 Laptops", "quantity": 15, "email": "a@a.example"},
                 {"bidder": "B", "price": 70000.0, "references_score": 10, "concept_score": 10},
             ])
         client_cls.assert_not_called()
-        self.assertIsNone(res["losers"][0]["legal_justification"])
-        self.assertIn("GEMINI_API_KEY", res["losers"][0]["letter_error"])
+        self.assertEqual(res["winner"]["bidder"], "A")
+        self.assertEqual(res["winner"]["total_points"], 87.5)
+        self.assertEqual(res["losers"][0]["total_points"], 85.0)
+        self.assertEqual((res["winner"]["item"], res["winner"]["quantity"], res["winner"]["email"]),
+                         ("15 Laptops", 15, "a@a.example"))
 
     # --- Issue 2: no offline fallback -----------------------------------------------------
 

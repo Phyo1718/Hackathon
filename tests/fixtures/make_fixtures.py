@@ -18,6 +18,7 @@ FIXTURES = {
         "Item: 15 Dell Latitude 5450 Laptops (3 years warranty)",
         "Total Price: EUR 14,500.00",
         "Delivery: 2 weeks",
+        "Contact: angebote@dell.example",
     ],
     "OfficeDepot_bid.pdf": [
         "ANGEBOT",

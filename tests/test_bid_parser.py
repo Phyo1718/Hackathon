@@ -1,3 +1,4 @@
+import os
 import unittest
 from pathlib import Path
 
@@ -151,6 +152,23 @@ class TestBidParsing(unittest.TestCase):
         with self.assertRaises(BidExtractionError):
             extract_pdf_text(b"not a pdf")
 
+
+
+UNICODE_FONT = "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"
+
+
+class TestLigatures(unittest.TestCase):
+    @unittest.skipUnless(os.path.exists(UNICODE_FONT), "needs a Unicode font to write the ligature")
+    def test_pdf_ligatures_are_normalised(self):
+        from fpdf import FPDF
+        from src.bid_parser import parse_bid_pdf
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.add_font("DejaVu", fname=UNICODE_FONT)
+        pdf.set_font("DejaVu", size=12)
+        pdf.cell(0, 8, "Anbieter: Of\ufb01ceDepot Deutschland", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 8, "Gesamtpreis: 100,00 EUR", new_x="LMARGIN", new_y="NEXT")
+        self.assertEqual(parse_bid_pdf(bytes(pdf.output()))["bidder"], "OfficeDepot Deutschland")
 
 if __name__ == "__main__":
     unittest.main()

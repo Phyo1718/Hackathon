@@ -4,6 +4,7 @@ import re
 import sqlite3
 import unittest
 from unittest.mock import patch
+from urllib.parse import unquote
 
 from fpdf import FPDF
 from streamlit.testing.v1 import AppTest
@@ -282,22 +283,23 @@ class TestStreamlitApp(IsolatedTestCase):
         self.assertFalse(at.exception)
         self.assertEqual(len(at.error), 0)
 
-        row = at.data_editor[0].value.iloc[0]
+        editor = at.data_editor[0]
+        row = editor.value.iloc[0]
+        # Shown: Bidder, Price and the two scores (email found in the supplier table: no email column)
+        self.assertEqual(list(editor.proto.column_order), ["bidder", "price", "references_score", "concept_score"])
         self.assertEqual(row["bidder"], "Bechtle GmbH")
         self.assertEqual(row["price"], 15200.0)
-        self.assertEqual(row["quantity"], 15)
         self.assertEqual(row["delivery_days"], 7)
         self.assertEqual(row["warranty_months"], 36)
-        self.assertTrue(row["item"].startswith("15 HP EliteBook"))
-        self.assertIn("Total Price: EUR 15200.00", row["evidence"])
-        # References / Service and Concept / Quality are proposed by the agent, with reasons
+        # References / Service and Concept / Quality are proposed by the agent; reasons and the
+        # source text are in the breakdown below the table
         self.assertEqual(row["references_score"], 7)
         self.assertEqual(row["concept_score"], 8)
-        self.assertEqual(
-            row["references_basis"],
-            "KI · +4 früherer Auftrag VA-2026-H06 (+1 weitere) · +3 Garantie 3 Jahre · Referenzen: keine im Angebot",
-        )
-        self.assertTrue(row["concept_basis"].startswith("KI · +4 15 Laptops wie angefragt (Marke nicht bewertet)"))
+        breakdown = " ".join(m.value for e in at.expander for m in e.markdown)
+        self.assertIn("+4 früherer Auftrag VA-2026-H06 (+1 weitere) · +3 Garantie 3 Jahre · Referenzen: keine im Angebot", breakdown)
+        self.assertIn("Angebot: 15 HP EliteBook Laptops (3 years warranty) · Menge 15", breakdown)
+        self.assertIn("Fundstellen in der PDF: Bechtle_bid.pdf: Supplier: Bechtle GmbH", breakdown)
+        self.assertIn("Total Price: EUR 15200.00", breakdown)
         self.assertEqual(len(at.warning), 0)
 
         # Run Evaluation needs the committee's confirmation, not hand-typed scores
@@ -320,9 +322,11 @@ class TestStreamlitApp(IsolatedTestCase):
         uploader.set_value([("unknown_bid.pdf", bytes(pdf.output()), "application/pdf")]).run()
         self.assertFalse(at.exception)
 
-        row = at.data_editor[0].value.iloc[0]
+        editor = at.data_editor[0]
+        row = editor.value.iloc[0]
         self.assertTrue(row[["references_score", "concept_score"]].isna().all())
-        self.assertTrue(row["references_basis"].startswith("erforderlich"))
+        # No email column, even without an address (it is asked for in the letters section)
+        self.assertEqual(list(editor.proto.column_order), ["bidder", "price", "references_score", "concept_score"])
         warning = next(w.value for w in at.warning)
         self.assertIn(
             "- Unbekannt Handel GmbH: Referenzen / Service – keine Zusammenarbeit bekannt und keine Referenzen im Angebot",
@@ -340,8 +344,8 @@ class TestStreamlitApp(IsolatedTestCase):
         table = at.data_editor[0].value.set_index("bidder")
         self.assertEqual(table["references_score"].to_dict(),
                          {"Bechtle GmbH": 7, "Dell Technologies": 5, "OfficeDepot Deutschland GmbH": 2})
-        self.assertTrue(table.loc["OfficeDepot Deutschland GmbH", "references_basis"].endswith(
-            "kein Auftrag in IT-Ausstattung (zugelassen nur für Büromaterial) · Referenzen: keine im Angebot"))
+        breakdown = " ".join(m.value for e in at.expander for m in e.markdown)
+        self.assertIn("kein Auftrag in IT-Ausstattung (zugelassen nur für Büromaterial) · Referenzen: keine im Angebot", breakdown)
 
         # The committee lowers Dell's References / Service from 5 to 4
         edits = at.session_state["bid_edits"]
@@ -349,8 +353,9 @@ class TestStreamlitApp(IsolatedTestCase):
         edits[dell_key]["references_score"] = 4.0
         at.session_state["bid_edits"] = edits
         at.run()
-        table = at.data_editor[0].value.set_index("bidder")
-        self.assertEqual(table.loc["Dell Technologies", "references_basis"].split(" · ")[0], "Kommission (KI-Vorschlag 5)")
+        self.assertEqual(at.data_editor[0].value.set_index("bidder").loc["Dell Technologies", "references_score"], 4.0)
+        breakdown = " ".join(m.value for e in at.expander for m in e.markdown)
+        self.assertIn("Wert der Kommission: 4", breakdown)
 
         self.confirm_scores(at)
         at.button(key="eval_bids_btn").click().run()
@@ -361,6 +366,12 @@ class TestStreamlitApp(IsolatedTestCase):
         self.assertEqual(scores["Dell Technologies"]["references"]["committee"], 4.0)
         self.assertEqual(scores["Bechtle GmbH"]["references"]["agent"], scores["Bechtle GmbH"]["references"]["committee"])
         self.assertIn("früherer Auftrag", scores["Bechtle GmbH"]["references"]["reason"]["DE"])
+        # Addresses from the supplier table (Dell's from its PDF), stored with the letters
+        self.assertEqual({b["bidder"]: b["letter"]["to"] for b in run["bidders"]}, {
+            "Bechtle GmbH": "vergabe@bechtle.example",
+            "Dell Technologies": "angebote@dell.example",
+            "OfficeDepot Deutschland GmbH": "vertrieb@officedepot.example",
+        })
 
         at.button(key="nav_insights").click().run()
         self.assertFalse(at.exception)
@@ -395,8 +406,9 @@ class TestStreamlitApp(IsolatedTestCase):
         self.upload_bids(at, "Bechtle_bid.pdf")
         table = at.data_editor[0].value
         self.assertEqual(table["bidder"].tolist(), ["Bechtle GmbH"])
-        self.assertTrue(table["evidence"].iloc[0].startswith("Bechtle_bid.pdf: Supplier: Bechtle GmbH"))
-        self.assertNotIn("Demo", " ".join(table["evidence"]))
+        sources = at.session_state["bid_extractions"]
+        self.assertEqual([e["file"] for e in sources.values()], ["Bechtle_bid.pdf"])
+        self.assertEqual(next(iter(sources.values()))["bid"]["sources"]["bidder"], "Supplier: Bechtle GmbH")
 
         # A committee score for Bechtle is kept when other files are added or removed
         edits = at.session_state["bid_edits"]
@@ -539,11 +551,14 @@ class TestStreamlitApp(IsolatedTestCase):
         self.assertTrue(any("VA-2025-0412" in e.label for e in at.expander))
         seeded = at.session_state["history"]["tenders"][0]
         self.assertEqual(seeded["bidders"][0]["bidder"], "Bechtle GmbH")
-        self.assertEqual(seeded["bidders"][0]["status"], "winner")
+        self.assertEqual(seeded["bidders"][0]["rank"], 1)
+        self.assertTrue(seeded["award_approved"])
+        self.assertTrue(all(b["letter"]["sent_at"] for b in seeded["bidders"]))
+        self.assertEqual(seeded["approved_at"], "2025-11-16T15:00:00")
         self.assertIsNone(seeded["bidders"][0]["scores"]["references"]["agent"])
         self.assertIsNotNone(seeded["bidders"][0]["scores"]["price"]["agent"])
 
-        # A run with three uploaded quotations for VA-2026-0001 (letters fail: no real Gemini in tests)
+        # A run with three uploaded quotations for VA-2026-0001
         at.session_state["history_view"] = None
         self.approve(at, "VA-2026-0001")
         at.button(key="nav_bids").click().run()
@@ -557,8 +572,8 @@ class TestStreamlitApp(IsolatedTestCase):
         self.assertEqual(run["ref"], "VA-2026-0001")
         self.assertEqual(run["weights"], {"price": 60.0, "delivery": 20.0, "warranty": 20.0})
         self.assertEqual([b["rank"] for b in run["bidders"]], [1, 2, 3])
-        self.assertEqual(run["bidders"][0]["status"], "winner")
-        self.assertEqual({b["status"] for b in run["bidders"][1:]}, {"failed"})
+        self.assertFalse(run["award_approved"])
+        self.assertEqual({b["letter"]["sent_at"] for b in run["bidders"]}, {None})
         for bidder in run["bidders"]:
             for key in run["weights"]:
                 # No committee corrections: agent and committee scores agree
@@ -567,6 +582,129 @@ class TestStreamlitApp(IsolatedTestCase):
         at.button(key="history_btn_bids").click().run()
         self.assertFalse(at.exception)
         self.assertTrue(any("VA-2026-0001" in e.label for e in at.expander))
+
+    @staticmethod
+    def email_links(at, compact=False):
+        """(url, disabled) of the email buttons: letters section, or the history rows (compact)."""
+        history_labels = ("✉ Senden", "✉ Erneut öffnen")
+        return [(b.proto.url, b.proto.disabled) for b in at.get("link_button")
+                if (b.proto.label in history_labels) == compact]
+
+    def evaluate_demo_bids(self, at):
+        self.approve(at, "VA-2026-0001")
+        at.button(key="nav_bids").click().run()
+        self.upload_bids(at, *BID_FIXTURES)
+        self.confirm_scores(at)
+        at.button(key="eval_bids_btn").click().run()
+        self.assertFalse(at.exception)
+        return self.saved_history()["tenders"][-1]
+
+    def test_letters_are_stored_with_the_run(self):
+        at = self.start_app()
+        run = self.evaluate_demo_bids(at)
+        letters = {b["bidder"]: b["letter"] for b in run["bidders"]}
+        self.assertEqual({l["type"] for l in letters.values()}, {"award", "rejection"})
+        award = letters["Bechtle GmbH"]
+        self.assertEqual(award["to"], "vergabe@bechtle.example")
+        self.assertTrue(award["subject_de"].startswith("Zuschlag – VA-2026-0001"))
+        self.assertTrue(award["subject_en"].startswith("Award of contract – VA-2026-0001"))
+        self.assertIn("Zuschlagspreis: 15.200,00 EUR", award["body_de"])
+        self.assertIn("Awarded price: EUR 15,200.00", award["body_en"])
+        self.assertEqual(award["generated_at"], run["evaluated_at"])
+        self.assertIsNone(award["sent_at"])
+        self.assertEqual((run["award_approved"], run["approved_at"]), (False, None))
+
+    def test_letters_award_first_then_rejections_and_history(self):
+        at = self.start_app()
+        run = self.evaluate_demo_bids(at)
+        self.assertTrue(any(c.value == "Empfohlener Bieter" for c in at.caption))
+        self.assertTrue(any(s.value == "Zuschlags- und Absageschreiben (§ 46 UVgO)" for s in at.subheader))
+        self.assertEqual(run["bidders"][0]["bidder"], "Bechtle GmbH")
+
+        # Before approval: all three locked, one shared caption (not one per row)
+        self.assertEqual([d for _, d in self.email_links(at)], [True, True, True])
+        captions = [c.value for c in at.caption]
+        self.assertEqual(captions.count("Zum Freischalten der E-Mails 'Zuschlag freigegeben' anhaken."), 1)
+        self.assertFalse(any("Wird freigeschaltet" in c for c in captions))
+
+        # Approval unlocks the award and both rejections in the same run
+        at.checkbox(key=f"bids_approved_{run['id']}").check().run()
+        self.assertEqual([d for _, d in self.email_links(at)], [False, False, False])
+        award_url = self.email_links(at)[0][0]
+        self.assertTrue(award_url.startswith("mailto:vergabe@bechtle.example?subject=Zuschlag"))
+        self.assertIn("15.200%2C00%20EUR", award_url)
+        self.assertTrue(self.saved_history()["tenders"][-1]["approved_at"])
+        self.assertNotIn("Zum Freischalten der E-Mails 'Zuschlag freigegeben' anhaken.", [c.value for c in at.caption])
+        for url, _ in self.email_links(at)[1:]:
+            body = unquote(url)
+            self.assertIn("Bechtle GmbH", body)
+            for price in ("15.200", "14.500", "16.200", "15200", "14500", "16200"):
+                self.assertNotIn(price, body)
+        self.assertTrue(self.email_links(at)[1][0].startswith("mailto:angebote@dell.example?"))
+
+        # A rejection can go first: marking it as sent updates only its status
+        at.checkbox(key=f"sent_bids_{run['id']}_2").check().run()
+        saved = self.saved_history()["tenders"][-1]["bidders"]
+        self.assertTrue(saved[1]["letter"]["sent_at"])
+        self.assertIsNone(saved[0]["letter"]["sent_at"])
+        self.assertEqual([d for _, d in self.email_links(at)], [False, False, False])
+        labels = [e.label for e in at.expander]
+        self.assertTrue(any(l.startswith("Dell Technologies · Absageschreiben · Absage versandt") for l in labels))
+        self.assertIn("Bechtle GmbH · Zuschlagsschreiben · Empfohlener Bieter", labels)
+
+        # A missing address is asked for in that bidder's row and stored
+        history_run = next(r for r in at.session_state["history"]["tenders"] if r["id"] == run["id"])
+        history_run["bidders"][2]["letter"]["to"] = None
+        at.run()
+        self.assertIn("E-Mail-Adresse fehlt", [c.value for c in at.caption])
+        self.assertTrue(self.email_links(at)[2][1])
+        at.text_input(key=f"email_bids_{run['id']}_3").input("einkauf@officedepot.example").run()
+        self.assertEqual(self.saved_history()["tenders"][-1]["bidders"][2]["letter"]["to"], "einkauf@officedepot.example")
+        self.assertFalse(self.email_links(at)[2][1])
+
+        # Reopened app: the history shows the stored letters' state, never "None"
+        reloaded = self.start_app()
+        reloaded.button(key="nav_bids").click().run()
+        reloaded.button(key="history_btn_bids").click().run()
+        self.assertFalse(reloaded.exception)
+        texts = [m.value for m in reloaded.markdown] + [c.value for c in reloaded.caption]
+        self.assertFalse(any("None" in text for text in texts))
+        self.assertIn("Empfohlener Bieter", texts)
+        self.assertTrue(any(text.startswith("Absage versandt") for text in texts))
+        self.assertIn("Nicht berücksichtigt", texts)
+        history_links = self.email_links(reloaded, compact=True)
+        # VA-2026-0001: award and OfficeDepot to send, Dell re-open; VA-2025-0412: 3 re-open buttons
+        self.assertEqual(len(history_links), 6)
+        self.assertTrue(all(not disabled and url.startswith("mailto:") for url, disabled in history_links))
+        self.assertTrue(any(url.startswith("mailto:angebote@dell.example?") for url, _ in history_links))
+
+    def test_award_can_be_approved_later_from_history(self):
+        at = self.start_app()
+        run = self.evaluate_demo_bids(at)
+        at.button(key="history_btn_bids").click().run()
+        self.assertIn("Zum Freischalten der E-Mails 'Zuschlag freigegeben' anhaken.", [c.value for c in at.caption])
+        # The new run's three "Send" buttons are disabled; the seeded run's three re-open buttons work
+        self.assertEqual(sorted(d for _, d in self.email_links(at, compact=True)), [False] * 3 + [True] * 3)
+        at.checkbox(key=f"hist_approved_{run['id']}").check().run()
+        self.assertTrue(self.saved_history()["tenders"][-1]["award_approved"])
+        # Approval unlocks every row; each unsent letter shows "Send"
+        self.assertEqual([d for _, d in self.email_links(at, compact=True)], [False] * 6)
+        sends = [b for b in at.get("link_button") if b.proto.label == "✉ Senden"]
+        self.assertEqual(len(sends), 3)
+        at.checkbox(key=f"sent_hist_{run['id']}_3").check().run()
+        self.assertTrue(self.saved_history()["tenders"][-1]["bidders"][2]["letter"]["sent_at"])
+        self.assertTrue(any(c.value.startswith("Versandt ") for c in at.caption))
+
+    def test_sidebar_manual_download_follows_language(self):
+        at = self.start_app()
+        manual = at.sidebar.get("download_button")
+        if not (PROJECT_ROOT / "docs" / "Benutzerhandbuch.pdf").exists():
+            self.assertEqual(len(manual), 0)  # not built yet: hidden, no crash
+            return
+        self.assertEqual(manual[0].proto.label, "📘 Benutzerhandbuch")
+        at.segmented_control(key="lang_toggle").set_value("EN").run()
+        self.assertFalse(at.exception)
+        self.assertEqual(at.sidebar.get("download_button")[0].proto.label, "📘 User manual")
 
     def test_bid_dropdown_lists_only_approved_requests_without_evaluation(self):
         at = self.start_app()
@@ -624,7 +762,8 @@ class TestStreamlitApp(IsolatedTestCase):
         options = at.radio(key="transfer_choice_VA-2026-0003").options
         self.assertEqual([o.split(" · ")[0] for o in options], ["IT-Ausstattung", "Gebäudeunterhaltung", "Büromaterial"])
         self.assertTrue(all("§ 19 KomHKVO" in o for o in options))
-        self.assertEqual(len(at.get("download_button")), 1)
+        # The Deckungsantrag draft (the sidebar's user manual button is not part of the dialog)
+        self.assertEqual(len([b for b in at.get("download_button") if b.proto.label != "📘 Benutzerhandbuch"]), 1)
         self.assertEqual(at.session_state["history"]["transfers"][0]["ref"], "VA-2026-0003")
 
         # Nothing moves until the caseworker approves with the transfer included

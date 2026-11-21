@@ -1,0 +1,41 @@
+%% Gesamtablauf: vom Antrag bis zur Management-Übersicht
+flowchart TB
+  classDef agent fill:#DBEAFE,stroke:#2563EB,stroke-width:1.5px,color:#0F172A
+  classDef human fill:#1E3A8A,stroke:#1E3A8A,color:#FFFFFF,font-weight:bold
+  classDef doc fill:#F1F5F9,stroke:#64748B,color:#0F172A
+  classDef locked fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:6 4,color:#475569
+  classDef step fill:#FFFFFF,stroke:#94A3B8,color:#0F172A
+
+  subgraph L1["Fachbereich / Sachbearbeitung"]
+    N1["Neuer Beschaffungsantrag"]:::step
+    H1["👤 Genehmigen / Ablehnen<br/>(Abweichung: Begründung)"]:::human
+    D1@{ shape: doc, label: "Deckungsantrag (PDF)<br/>wenn Budget fehlt" }
+  end
+  subgraph L2["Agent (KI)"]
+    A1("AI · Vorprüfung:<br/>Budget, Lieferant,<br/>Barrierefreiheit"):::agent
+    A2("AI · Angebote auslesen,<br/>Punkte vorschlagen"):::agent
+    A3("AI · Wertung:<br/>Empfohlener Bieter"):::agent
+  end
+  subgraph L3["Vergabestelle / Kommission"]
+    N2["Angebote einholen,<br/>PDFs hochladen"]:::step
+    H2["👤 Kommission prüft<br/>und bestätigt"]:::human
+    H3["👤 Zuschlag freigegeben"]:::human
+    D2@{ shape: doc, label: "Zuschlags- und<br/>Absageschreiben (E-Mail)" }
+  end
+  subgraph L4["Management"]
+    N3["Verlauf und Management-Übersicht<br/>(Aufsicht über den Agenten)"]:::step
+  end
+
+  N1 --> A1 --> H1
+  H1 -. Budget fehlt .-> D1
+  D1 -. unterschrieben .-> H1
+  H1 -- genehmigt --> N2 --> A2 --> H2 --> A3 --> H3 --> D2 --> N3
+  class D1,D2 doc
+
+  subgraph LEG["Legende"]
+    direction LR
+    G1("AI · Agent-Schritt"):::agent ~~~ G2["👤 Entscheidung Mensch"]:::human ~~~ G3@{ shape: doc, label: "Dokument / Ausgabe" } ~~~ G4["Gesperrt"]:::locked
+  end
+  class G3 doc
+  %% Keep the legend below the flow
+  N3 ~~~ LEG

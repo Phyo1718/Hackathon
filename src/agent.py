@@ -54,7 +54,8 @@ def check_supplier(supplier_name: str) -> Dict[str, Any]:
             "supplier_name": supplier_name,
             "exists": False,
             "is_approved": False,
-            "category": None
+            "category": None,
+            "email": None,
         }
         
     conn = get_db_connection()
@@ -83,14 +84,16 @@ def check_supplier(supplier_name: str) -> Dict[str, Any]:
             "supplier_name": supplier_name,
             "exists": False,
             "is_approved": False,
-            "category": None
+            "category": None,
+            "email": None,
         }
     
     return {
         "supplier_name": row["Name"],
         "exists": True,
         "is_approved": bool(row["Is_Approved"]),
-        "category": row["Category"]
+        "category": row["Category"],
+        "email": row["Email"],
     }
 
 def get_prior_contracts(supplier_name: str) -> List[Dict[str, Any]]:
@@ -1156,11 +1159,13 @@ def calculate_price_score(price: float, lowest_price: float) -> float:
 #   committee    - 0-10 score confirmed by the evaluation committee; the agent proposes it
 #                  from the extracted facts (src/bid_scoring.py), the committee may overwrite it
 CRITERIA = {
-    "price": {"field": "price", "kind": "lowest_best", "label_de": "Preis"},
-    "delivery": {"field": "delivery_days", "kind": "lowest_best", "label_de": "Lieferzeit"},
-    "warranty": {"field": "warranty_months", "kind": "highest_best", "label_de": "Garantie"},
-    "references": {"field": "references_score", "kind": "committee", "label_de": "Referenzen / Service"},
-    "concept": {"field": "concept_score", "kind": "committee", "label_de": "Konzept / Qualität"},
+    "price": {"field": "price", "kind": "lowest_best", "label_de": "Preis", "label_en": "price"},
+    "delivery": {"field": "delivery_days", "kind": "lowest_best", "label_de": "Lieferzeit", "label_en": "delivery time"},
+    "warranty": {"field": "warranty_months", "kind": "highest_best", "label_de": "Garantie", "label_en": "warranty"},
+    "references": {"field": "references_score", "kind": "committee", "label_de": "Referenzen / Service",
+                   "label_en": "references / service"},
+    "concept": {"field": "concept_score", "kind": "committee", "label_de": "Konzept / Qualität",
+                "label_en": "concept / quality"},
 }
 
 # Weights in percent. The official sheet weights Preis/Referenzen/Konzept with the factors
@@ -1220,50 +1225,6 @@ def score_criterion(key: str, values: List[float], bidders: List[str]) -> List[f
     return [max(0.0, min(10.0, (10.0 / best) * (2 * best - v))) for v in values]
 
 
-def generate_rejection_letters(
-    winner: Dict[str, Any],
-    losers: List[Dict[str, Any]],
-    weights: Optional[Dict[str, float]] = None,
-) -> List[Dict[str, Any]]:
-    """Generates a Gemini rejection letter for each loser, in place.
-
-    On failure the loser gets legal_justification = None and letter_error = <message>;
-    no template text is substituted.
-    """
-    weights = validate_weights(weights or DEFAULT_WEIGHTS)
-    criteria_text = ", ".join(f"{CRITERIA[k]['label_de']} ({w:g} %)" for k, w in weights.items())
-
-    def points_text(bid: Dict[str, Any]) -> str:
-        return ", ".join(f"{CRITERIA[k]['label_de']}: {bid.get(f'{k}_points', 0)} Punkte" for k in weights)
-
-    try:
-        client = get_genai_client()
-    except Exception as e:
-        for loser in losers:
-            loser["legal_justification"] = None
-            loser["letter_error"] = str(e)
-        return losers
-
-    for loser in losers:
-        prompt = f"""
-        You are a public procurement specialist for the City of Hildesheim under German procurement law (UVgO / GWB).
-        Generate a formal, legally binding rejection letter paragraph (Begründung nach § 13 UVgO) explaining why Bidder '{loser['bidder']}' (Price: €{loser['price']:,.2f}, Total Score: {loser['total_points']} of 100 points; {points_text(loser)}) was not selected, and why the winning bidder '{winner['bidder']}' (Price: €{winner['price']:,.2f}, Total Score: {winner['total_points']} of 100 points; {points_text(winner)}) won based on the published evaluation criteria: {criteria_text}.
-        Write in professional German.
-        """
-        try:
-            resp = client.models.generate_content(
-                model="gemini-3.5-flash-lite",
-                contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.2)
-            )
-            loser["legal_justification"] = resp.text.strip()
-            loser["letter_error"] = None
-        except Exception as e:
-            loser["legal_justification"] = None
-            loser["letter_error"] = str(e)
-    return losers
-
-
 def score_bids(bids_data: List[Dict[str, Any]], weights: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     """Scores bids with weighted criteria (0-100 points), ranked best first. No letters, no AI.
 
@@ -1277,7 +1238,11 @@ def score_bids(bids_data: List[Dict[str, Any]], weights: Optional[Dict[str, floa
         raise ValueError(f"Bid values missing, no evaluation possible: {details}.")
 
     bidders = [str(b["bidder"]) for b in bids_data]
-    evaluated_bids = [{"bidder": b["bidder"], "price": float(b["price"])} for b in bids_data]
+    # Item, quantity and email are carried along for the award and rejection letters
+    evaluated_bids = [
+        {"bidder": b["bidder"], "price": float(b["price"]), **{k: b[k] for k in ("item", "quantity", "email") if k in b}}
+        for b in bids_data
+    ]
     for key, weight in weights.items():
         field = CRITERIA[key]["field"]
         values = [float(b[field]) for b in bids_data]
@@ -1319,14 +1284,11 @@ def requests_awaiting_bids(
 
 
 def evaluate_bids(bids_data: List[Dict[str, Any]], weights: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
-    """Scores bids with weighted criteria (see score_bids) and generates § 13 UVgO rejection letters."""
+    """Scores bids with weighted criteria (see score_bids). The award and rejection letters
+    (§ 46 UVgO) are built from the saved run by src/letters.py."""
     if not bids_data:
         return {"error": "No bids provided"}
-
-    result = score_bids(bids_data, weights)
-    # Scoring above is deterministic and always returned; letters may fail independently.
-    generate_rejection_letters(result["winner"], result["losers"], result["weights"])
-    return result
+    return score_bids(bids_data, weights)
 
 def evaluate_request(text: str) -> Dict[str, Any]:
     """Extracts parameters, verifies supplier and audit history, checks budget, and returns decision.

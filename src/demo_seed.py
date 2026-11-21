@@ -29,10 +29,18 @@ SEED_TENDER = {
     "ref": "VA-2025-0412",
     "title": {"EN": "15 laptops for the city administration", "DE": "15 Laptops für die Stadtverwaltung"},
     "evaluated_at": "2025-11-14T10:30:00",
+    # Completed: award approved, award and rejection letters sent
+    "approved_at": "2025-11-16T15:00:00",
+    "award_sent_at": "2025-11-17T09:00:00",
+    "rejections_sent_at": "2025-11-17T09:30:00",
+    # Email addresses on the reserved .example domain only (no real company is emailed)
     "bids": [
-        {"bidder": "Bechtle GmbH", "price": 15200.0, "references_score": 8, "concept_score": 7},
-        {"bidder": "Dell Technologies", "price": 14500.0, "references_score": 7, "concept_score": 6},
-        {"bidder": "OfficeDepot Deutschland", "price": 16200.0, "references_score": 6, "concept_score": 8},
+        {"bidder": "Bechtle GmbH", "price": 15200.0, "references_score": 8, "concept_score": 7,
+         "item": "15 HP EliteBook Laptops", "quantity": 15, "email": "vergabe@bechtle.example"},
+        {"bidder": "Dell Technologies", "price": 14500.0, "references_score": 7, "concept_score": 6,
+         "item": "15 Dell Latitude Laptops", "quantity": 15, "email": "angebote@dell.example"},
+        {"bidder": "OfficeDepot Deutschland", "price": 16200.0, "references_score": 6, "concept_score": 8,
+         "item": "15 Lenovo ThinkPad Laptops", "quantity": 15, "email": "vertrieb@officedepot.example"},
     ],
 }
 

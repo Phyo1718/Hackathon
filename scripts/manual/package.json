@@ -1,0 +1,9 @@
+{
+  "name": "procurement-manual-build",
+  "private": true,
+  "description": "Local copies of Mermaid and marked for scripts/build_manual.py (loaded from disk in headless Chrome, never from a CDN).",
+  "dependencies": {
+    "marked": "18.1.2",
+    "mermaid": "11.17.2"
+  }
+}

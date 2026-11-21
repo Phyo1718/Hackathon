@@ -6,6 +6,7 @@ not found stay None; nothing is defaulted.
 """
 import io
 import re
+import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
 from pypdf import PdfReader
@@ -22,6 +23,9 @@ def extract_pdf_text(pdf_bytes: bytes) -> str:
         if reader.is_encrypted:
             reader.decrypt("")
         text = "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+        # PDF text often carries typographic ligatures ("Of\ufb01ceDepot"); NFKC turns them into
+        # plain letters, so names match the supplier table
+        text = unicodedata.normalize("NFKC", text)
     except Exception as e:
         raise BidExtractionError(f"PDF could not be read: {e}") from e
     if not text:
@@ -161,6 +165,8 @@ _VALIDITY = re.compile(
     re.IGNORECASE,
 )
 
+_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
 _DAYS_PER_UNIT = {"day": 1, "week": 7, "month": 30, "year": 365}
 
 
@@ -240,8 +246,8 @@ def _find_price(lines: List[str]) -> Dict[str, Any]:
 
 
 def parse_bid_text(text: str, filename: str = "") -> Dict[str, Any]:
-    """Extracts bidder, price, item, quantity, delivery, warranty, references, service terms
-    and offer validity from quotation text.
+    """Extracts bidder, price, item, quantity, delivery, warranty, references, service terms,
+    offer validity and the email address from quotation text.
 
     Every found value has a matching entry in "sources" with the line it was taken from.
     "missing" lists the fields that could not be found.
@@ -261,6 +267,7 @@ def parse_bid_text(text: str, filename: str = "") -> Dict[str, Any]:
         "service": None,
         "on_site_service": False,
         "validity": None,
+        "email": None,
     }
 
     # Bidder: labelled supplier line, then a letterhead line with a legal form, then the filename
@@ -345,6 +352,13 @@ def parse_bid_text(text: str, filename: str = "") -> Dict[str, Any]:
         if match:
             bid["validity"] = match.group("v").strip(" .,;") or line
             sources["validity"] = line
+            break
+
+    for line in lines:
+        match = _EMAIL.search(line)
+        if match:
+            bid["email"] = match.group(0).rstrip(".")
+            sources["email"] = line
             break
 
     bid["sources"] = sources

@@ -1,0 +1,41 @@
+%% End-to-end flow: from the request to Management Insights
+flowchart TB
+  classDef agent fill:#DBEAFE,stroke:#2563EB,stroke-width:1.5px,color:#0F172A
+  classDef human fill:#1E3A8A,stroke:#1E3A8A,color:#FFFFFF,font-weight:bold
+  classDef doc fill:#F1F5F9,stroke:#64748B,color:#0F172A
+  classDef locked fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:6 4,color:#475569
+  classDef step fill:#FFFFFF,stroke:#94A3B8,color:#0F172A
+
+  subgraph L1["Department / Caseworker"]
+    N1["New procurement request"]:::step
+    H1["👤 Approve / Reject<br/>(override: justification)"]:::human
+    D1@{ shape: doc, label: "Deckungsantrag (PDF)<br/>if budget is missing" }
+  end
+  subgraph L2["Agent (AI)"]
+    A1("AI · Pre-check:<br/>budget, supplier,<br/>accessibility"):::agent
+    A2("AI · Read bids,<br/>propose scores"):::agent
+    A3("AI · Evaluation:<br/>Recommended supplier"):::agent
+  end
+  subgraph L3["Procurement office / Committee"]
+    N2["Collect bids,<br/>upload PDFs"]:::step
+    H2["👤 Committee reviews<br/>and confirms"]:::human
+    H3["👤 Award approved"]:::human
+    D2@{ shape: doc, label: "Award and rejection<br/>letters (email)" }
+  end
+  subgraph L4["Management"]
+    N3["History and Management Insights<br/>(AI oversight)"]:::step
+  end
+
+  N1 --> A1 --> H1
+  H1 -. budget missing .-> D1
+  D1 -. signed .-> H1
+  H1 -- approved --> N2 --> A2 --> H2 --> A3 --> H3 --> D2 --> N3
+  class D1,D2 doc
+
+  subgraph LEG["Legend"]
+    direction LR
+    G1("AI · Agent step"):::agent ~~~ G2["👤 Human decision"]:::human ~~~ G3@{ shape: doc, label: "Document / output" } ~~~ G4["Locked"]:::locked
+  end
+  class G3 doc
+  %% Keep the legend below the flow
+  N3 ~~~ LEG
