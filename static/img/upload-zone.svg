@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 96" width="120" height="96">
+  <!-- Original decorative illustration: overlapping brand circles, a sheet of paper and an upload arrow. -->
+  <g style="isolation:isolate">
+    <circle cx="74" cy="44" r="30" fill="#0B99C4" fill-opacity=".85" style="mix-blend-mode:multiply"/>
+    <circle cx="48" cy="58" r="24" fill="#8EBE9E" fill-opacity=".85" style="mix-blend-mode:multiply"/>
+    <circle cx="92" cy="70" r="16" fill="#CC6815" fill-opacity=".85" style="mix-blend-mode:multiply"/>
+  </g>
+  <circle cx="60" cy="48" r="44" fill="none" stroke="#CC6815" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="0.1 8"/>
+  <g transform="translate(44 22)">
+    <path d="M4 0h20l10 10v36a4 4 0 0 1-4 4H4a4 4 0 0 1-4-4V4a4 4 0 0 1 4-4z" fill="#FFFFFF" stroke="#45465A" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M24 0v10h10" fill="none" stroke="#45465A" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M17 40V22m-7 7 7-7 7 7" fill="none" stroke="#076A89" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
