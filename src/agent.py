@@ -1361,7 +1361,7 @@ def verify_extracted_request(extracted: ExtractedRequest) -> Dict[str, Any]:
     # Decision logic & Reasoning steps
     reasoning_steps = []
     reasoning_steps.append(f"1. **Extraction:** Extracted Supplier: **{extracted.supplier_name}**, Amount: **€{extracted.amount:,.2f}**, Category: **{extracted.category}**.")
-    reasoning_steps.append(f"2. **Procurement Type Detection:** Queried the `Audit_Logs` table for previous approved contracts with '{extracted.supplier_name}': {'Found an approved contract -> Classified as **Auftragserweiterung**.' if is_extension else 'No previous approved contract found -> Classified as new **LuD** (Lieferungen und Dienstleistungen).'}")
+    reasoning_steps.append(f"2. **Procurement Type Detection:** Checked the procurement history for previous approved contracts with '{extracted.supplier_name}': {'Found an approved contract -> Classified as **Auftragserweiterung**.' if is_extension else 'No previous approved contract found -> Classified as new **LuD** (Lieferungen und Dienstleistungen).'}")
     
     decision = "APPROVED"
     
