@@ -862,7 +862,7 @@ st.html(ui.css(VIEWS))
 # else is rendered until an API key is configured.
 if not has_api_key():
     with st.container(key="hzgate"):
-        st.html(ui.illustration("key", "blue", "lg"))
+        st.html(ui.illustration("key", "blue", "lg", paper=False))
         st.error(
             "**Gemini API key missing / Gemini-API-Schlüssel fehlt.**\n\n"
             "This application requires Google Gemini and has no offline mode. To set it up:\n\n"
@@ -2289,11 +2289,11 @@ if current_view == "verify":
             selection_mode="single-row",
             key=f"queue_table_{st.session_state['queue_table_nonce']}",
             column_config={
-                "ref": st.column_config.TextColumn(t("col_ref"), width="small"),
+                "ref": st.column_config.TextColumn(t("col_ref"), width=125),
                 "request": st.column_config.TextColumn(t("col_request"), width="large"),
-                "assessment": st.column_config.TextColumn(t("col_assessment"), width="small"),
-                "accessibility": st.column_config.TextColumn(t("col_accessibility"), width="small"),
-                "received": st.column_config.TextColumn(t("col_received"), width="small"),
+                "assessment": st.column_config.TextColumn(t("col_assessment"), width=175),
+                "accessibility": st.column_config.TextColumn(t("col_accessibility"), width=160),
+                "received": st.column_config.TextColumn(t("col_received"), width=140),
             },
         )
         selected_rows = selection.selection.rows if selection else []
@@ -2399,7 +2399,6 @@ elif current_view == "bids":
     row_keys = [k for k in upload_keys if "bid" in extractions[k]]
 
     if tender_ready and not bid_pdfs:
-        st.html(ui.illustration("upload_file", "blue", "sm"))
         st.caption(t("bids_upload_hint"))
 
     if row_keys:
@@ -2673,15 +2672,17 @@ elif current_view == "bids":
             st.subheader(t("matrix_header"))
         st.caption(" · ".join(f"{t(f'crit_{k}')} {w:g} %" for k, w in result_weights.items()))
         matrix_config = {
-            "bidder": st.column_config.TextColumn(t("col_bidder")),
-            "price": st.column_config.NumberColumn(t("col_price"), format="%.2f"),
-            "total_points": st.column_config.NumberColumn(t("col_total_pts"), format="%.2f"),
+            "bidder": st.column_config.TextColumn(t("col_bidder"), width=165),
+            "price": st.column_config.NumberColumn(t("col_price"), format="%.2f", width=80),
+            "total_points": st.column_config.NumberColumn(t("col_total_pts"), format="%.2f", width=80),
         }
         matrix_order = ["bidder", "price"]
         for key in result_weights:
             label = t(f"crit_{key}")
-            matrix_config[f"{key}_score"] = st.column_config.NumberColumn(t("col_score").format(criterion=label), format="%.2f")
-            matrix_config[f"{key}_points"] = st.column_config.NumberColumn(t("col_points").format(criterion=label), format="%.2f")
+            matrix_config[f"{key}_score"] = st.column_config.NumberColumn(t("col_score").format(criterion=label), format="%.2f",
+                                                                         width=72)
+            matrix_config[f"{key}_points"] = st.column_config.NumberColumn(t("col_points").format(criterion=label), format="%.2f",
+                                                                          width=72)
             matrix_order += [f"{key}_score", f"{key}_points"]
         st.dataframe(
             pd.DataFrame(ranked),
@@ -2866,10 +2867,10 @@ elif current_view == "insights":
                 hide_index=True,
                 width="stretch",
                 column_config={
-                    "ref": st.column_config.TextColumn(t("col_ref")),
+                    "ref": st.column_config.TextColumn(t("col_ref"), width=125),
                     "request": st.column_config.TextColumn(t("col_request")),
-                    "agent": st.column_config.TextColumn(t("ins_col_agent")),
-                    "human": st.column_config.TextColumn(t("ins_col_human")),
+                    "agent": st.column_config.TextColumn(t("ins_col_agent"), width=165),
+                    "human": st.column_config.TextColumn(t("ins_col_human"), width=140),
                     "date": st.column_config.TextColumn(t("ins_col_date")),
                     "note": st.column_config.TextColumn(t("ins_col_note")),
                 },
@@ -2898,7 +2899,7 @@ elif current_view == "insights":
                 hide_index=True,
                 width="stretch",
                 column_config={
-                    "ref": st.column_config.TextColumn(t("col_ref")),
+                    "ref": st.column_config.TextColumn(t("col_ref"), width=125),
                     "bidder": st.column_config.TextColumn(t("ins_col_bidder")),
                     "criterion": st.column_config.TextColumn(t("ins_col_criterion")),
                     "agent": st.column_config.TextColumn(t("ins_col_proposed")),

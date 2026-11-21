@@ -77,3 +77,7 @@ style = "italic"
 [theme.sidebar]
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F2F0EB"
+
+[client]
+# Viewer mode: hides the developer toolbar (Deploy and the main menu)
+toolbarMode = "viewer"

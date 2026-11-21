@@ -120,7 +120,7 @@ def hero_art(view: str) -> str:
     )
 
 
-def illustration(icon: str, tone: str = "blue", size: str = "md", paper: bool = True) -> str:
+def illustration(icon: str, tone: str = "blue", size: str = "md", paper: bool = False) -> str:
     """Original flat illustration: overlapping circles, an optional sheet of paper, and a glyph badge.
     Used for empty states, the startup screen and success states."""
     ink = _ICON_INK.get(tone, TOKENS["blue_ink"])
@@ -219,8 +219,8 @@ _BASE_CSS = """
 }
 .stApp { background-image: url("__NOISE__"); }
 [data-testid="stAppViewContainer"], [data-testid="stMain"] { background-color: transparent; }
-[data-testid="stHeader"] { background-color: rgba(248, 247, 244, .82); backdrop-filter: blur(6px); }
-[data-testid="stMainBlockContainer"] { padding-top: 3.25rem; padding-bottom: 4rem; }
+[data-testid="stHeader"] { background-color: var(--hz-paper); box-shadow: 0 1px 0 var(--hz-line); }
+[data-testid="stMainBlockContainer"] { padding-top: 5.25rem; padding-bottom: 4rem; }
 html, body, .stApp, .stApp p, .stApp li, .stApp label, .stApp input, .stApp textarea, .stApp button {
   font-family: var(--hz-font-body);
 }
@@ -340,6 +340,7 @@ section[role="dialog"] h2 { font-size: clamp(1.4rem, 4vw, 2rem); color: var(--hz
   background: var(--hz-surface); display: grid !important; place-items: center; box-shadow: 0 6px 16px rgba(69,70,90,.16);
 }
 .hz-illus-badge .hz-mi { font-size: 2rem; }
+.hz-illus:not(:has(.hz-sheet)) .hz-illus-badge { right: auto; bottom: auto; left: 47.5%; top: 24.7%; }
 .hz-illus-sm .hz-illus-badge .hz-mi { font-size: 1.5rem; }
 .hz-illus-lg .hz-illus-badge .hz-mi { font-size: 2.6rem; }
 
@@ -485,8 +486,7 @@ label[data-testid="stRadioOption"]:has(input:focus-visible) > div > div:first-ch
 /* File uploader drop zone */
 [data-testid="stFileUploaderDropzone"] {
   border: 2px dashed rgba(7, 106, 137, .45); border-radius: 16px;
-  background: #F2F8FA url("app/static/img/upload-zone.svg") no-repeat right 1rem center / 92px auto;
-  padding-right: 7.5rem; min-height: 5.5rem;
+  background: #F2F8FA; min-height: 5.5rem;
 }
 [data-testid="stFileUploaderDropzone"]:hover { border-color: var(--hz-blue-ink); box-shadow: 0 0 0 4px rgba(11, 153, 196, .16); background-color: #EAF5F9; }
 [data-testid="stFileUploaderDropzone"][aria-disabled="true"] {
@@ -559,6 +559,27 @@ label[data-testid="stRadioOption"]:has(input:focus-visible) > div > div:first-ch
 [data-testid="stMetricDelta"] svg { display: inline; }
 [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Up"]) { color: var(--hz-green-ink); }
 [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Down"]) { color: var(--hz-red-ink); }
+[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [class*="st-key-hzm_"]) { align-items: stretch; }
+[data-testid="stColumn"]:has([class*="st-key-hzm_"]) { display: flex; flex-direction: column; }
+[data-testid="stColumn"]:has([class*="st-key-hzm_"]) > [data-testid="stVerticalBlock"],
+[data-testid="stColumn"]:has([class*="st-key-hzm_"]) [data-testid="stLayoutWrapper"]:has(> [class*="st-key-hzm_"]) { flex: 1 1 auto; display: flex; flex-direction: column; }
+[data-testid="stLayoutWrapper"] > [class*="st-key-hzm_"] {
+  flex: 1 1 auto; height: 100%; border: 1px solid var(--hz-line); border-radius: 16px !important; padding: 1rem; justify-content: flex-start;
+}
+[class*="st-key-hzm_"] [data-testid="stMetricLabel"] { min-height: 2.7em; align-items: flex-start; flex: 1 0 auto; }
+[class*="st-key-hzm_"] { position: relative; }
+[class*="st-key-hzm_"] > [data-testid="stElementContainer"]:has([data-testid="stMetric"]) { flex: 1 1 auto; display: flex; }
+[class*="st-key-hzm_"] [data-testid="stMetric"] { flex: 1 1 auto; display: flex; flex-direction: column; }
+[class*="st-key-hzm_"] [data-testid="stMetric"] > div { flex: 1 1 auto; display: flex; flex-direction: column; }
+/* Insights row: every card reserves the caption space; the one caption sits inside its card */
+:is(.st-key-hzm_agreement, .st-key-hzm_overrides, .st-key-hzm_deferred, .st-key-hzm_transfers, .st-key-hzm_committee) { padding-bottom: 3.3rem !important; }
+.st-key-hzm_agreement > [data-testid="stElementContainer"]:has([data-testid="stCaptionContainer"]) {
+  position: absolute !important; left: 1rem; right: 1rem; bottom: .9rem; width: auto !important;
+}
+.st-key-hzm_agreement [data-testid="stCaptionContainer"] p { font-size: .88rem; line-height: 1.3; }
+:is(.st-key-hzm_agreement, .st-key-hzm_overrides, .st-key-hzm_deferred, .st-key-hzm_transfers, .st-key-hzm_committee) [data-testid="stMetricLabel"] p {
+  font-size: .86rem !important; letter-spacing: .025em; overflow-wrap: normal; word-break: normal;
+}
 [class*="st-key-hzm_"] [data-testid="stMetric"] { position: relative; padding-right: 3.2rem; }
 [class*="st-key-hzm_"] [data-testid="stMetric"]::after {
   content: var(--hz-icon, "bar_chart"); position: absolute; top: .1rem; right: 0;
@@ -610,7 +631,7 @@ section[role="dialog"] > button[aria-label="Close"]:focus-visible { outline: 3px
 .st-key-hzbrand .gov-meta { line-height: 1.3; align-items: flex-start; }
 .st-key-hzbrand [data-testid="stMarkdownContainer"] p strong {
   font-family: var(--hz-font-display); font-style: italic; font-weight: 700; text-transform: uppercase;
-  font-size: 1.35rem; line-height: 1.05; color: var(--hz-text); display: block;
+  font-size: 1.04rem; line-height: 1.1; color: var(--hz-text); display: block; letter-spacing: 0;
 }
 .st-key-hzbrand .gov-meta { font-size: .82rem; }
 .st-key-hzbrand .gov-meta::before { flex-basis: 18px; margin-top: .55em; }
@@ -769,14 +790,13 @@ section[role="dialog"] > button[aria-label="Close"]:focus-visible { outline: 3px
   .hz-hero-art { transform: scale(.72); transform-origin: right center; }
 }
 @media (max-width: 640px) {
-  [data-testid="stMainBlockContainer"] { padding-top: 2.75rem; }
+  [data-testid="stMainBlockContainer"] { padding-top: 4.75rem; }
   [class*="st-key-hzhero_"] { padding-right: 0; min-height: 0; padding-top: 5.4rem; }
   [class*="st-key-hzhero_"] > [data-testid="stElementContainer"]:has(.hz-hero-art) {
     top: 0; transform: none; width: 120px !important; height: 92px; overflow: visible;
   }
   .hz-hero-art { position: absolute; right: 0; top: 0; transform: scale(.48); transform-origin: top right; }
   :is(.st-key-history_btn_verify, .st-key-history_btn_bids) { margin-bottom: 0; align-self: flex-start; }
-  [data-testid="stFileUploaderDropzone"] { background-image: none; padding-right: 1rem; }
   .hz-step-num { font-size: 2rem; }
 }
 """
