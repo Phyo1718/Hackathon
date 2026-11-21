@@ -194,8 +194,8 @@ Each evaluation lists rank, bidder, price, the final score per criterion and the
 </div>
 
 - **How it works** (1) shows the flow diagram from page 2.
-- **Budget per line** (2): committed funds against the total. The run-out date is projected from the spending rate of the last 90 days (this needs at least 2 approved orders).
-- **Supplier share** (3): a supplier with more than 40 % of a line's spend is flagged.
+- **Budget per line** (2): for the selected line, the chart shows the funds committed this budget year (solid), the projection to 31 Dec at the 90-day rate (dashed) and the budget total (dotted). The table shows "Runs out ~date" if the budget is used up this year (amber within 60 days), otherwise "≈ NN % used by 31.12.". A projection needs at least 2 approved orders in 90 days.
+- **Supplier share** (3): one bar per supplier across all lines. A supplier is flagged in amber if it has more than 40 % of a line, the line has at least EUR 10,000 approved spend and 3 orders, and there are several suppliers or at least 3 orders from that supplier. Smaller lines only get the note "too little data for a concentration check".
 
 
 **AI oversight** shows:

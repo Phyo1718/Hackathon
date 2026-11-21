@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
@@ -63,7 +64,17 @@ from src.letters import (
 )
 from src.demo_seed import HISTORICAL_REQUESTS, SEED_REQUESTS, SEED_TENDER
 from src.init_db import get_db_path, init_db
-from src.insights import SUPPLIER_SHARE_LIMIT, budget_forecast, committee_changes, oversight, supplier_shares
+from src.insights import (
+    CONCENTRATION_MIN_LINE_ORDERS,
+    CONCENTRATION_MIN_LINE_SPEND,
+    SUPPLIER_SHARE_LIMIT,
+    budget_forecast,
+    burnup,
+    committee_changes,
+    oversight,
+    supplier_shares,
+    supplier_totals,
+)
 
 # Load environment variables
 load_dotenv()
@@ -107,17 +118,37 @@ TRANSLATIONS = {
         # Management Insights
         "insights_desc": "Key figures from the budget database and the decision history. Forecasts are projections, not commitments.",
         "tile_budget": "Budget per line",
-        "tile_budget_caption": "Committed vs. total. The run-out date is projected at the spending rate of the last 90 days and needs at least 2 approved orders in that period.",
+        "tile_budget_caption": "Committed vs. total in the current budget year. The projection to 31 Dec uses the spending rate of the last 90 days and needs at least 2 approved orders in that period.",
         "ins_col_line": "Budget line",
         "ins_col_department": "Department",
         "ins_col_committed": "Committed",
         "ins_col_total": "Total",
         "ins_col_used": "Used",
-        "ins_col_runout": "Projected run-out",
+        "ins_col_runout": "Projection to 31.12.",
         "ins_not_enough": "not enough data",
         "ins_exhausted": "exhausted",
+        "ins_runs_out": "Runs out ~{date}",
+        "ins_year_end": "≈ {share} used by 31.12.",
+        "ins_col_orders": "Orders",
+        "ins_concentration_skipped": "Too little data for a concentration check: {lines} (needs at least {spend} approved spend and {orders} orders on the line).",
+        "chart_line_select": "Budget line in the chart",
+        "chart_actual": "Actual",
+        "chart_projection": "Projection",
+        "chart_total": "Budget {amount}",
+        "chart_date": "Date",
+        "chart_series": "Series",
+        "chart_cumulative": "Committed (cumulative)",
+        "chart_share_total": "Share of total",
+        "chart_burnup_caption": "Solid: committed so far in this budget year. Dashed: projection to 31 Dec at the 90-day rate. Dotted: budget total of the line.",
+        "chart_no_projection": "Not enough orders in the last 90 days for a projection.",
+        "chart_supplier": "Supplier",
+        "chart_spend": "Approved spend",
+        "chart_orders": "Orders",
+        "chart_lines": "Budget lines",
+        "chart_flag": "above 40 %",
+        "chart_suppliers_caption": "Approved spend per supplier across all budget lines. Amber: flagged for concentration on a budget line (see below).",
         "tile_suppliers": "Supplier share of spend",
-        "tile_suppliers_caption": "Approved spend per budget line. A supplier with more than 40 % of a line is flagged.",
+        "tile_suppliers_caption": "Approved spend per budget line. A supplier with more than 40 % of a line is flagged if the line has at least EUR 10,000 approved spend and 3 orders, and several suppliers or at least 3 orders from that supplier.",
         "ins_col_supplier": "Supplier",
         "ins_col_spend": "Spend",
         "ins_col_share": "Share",
@@ -148,6 +179,7 @@ TRANSLATIONS = {
         "no_budget_data": "No budget data available.",
         "reset_btn": "Reset Demo Data",
         "manual_btn": "📘 User manual",
+        "menu_toggle": "Toggle menu",
         "how_it_works": "How it works",
         "how_it_works_caption": "From the request to Management Insights: the agent prepares, people decide.",
         "reset_success": "Database and request queue reset to the initial demo state.",
@@ -383,17 +415,37 @@ TRANSLATIONS = {
         # Management Insights
         "insights_desc": "Kennzahlen aus der Haushaltsdatenbank und dem Entscheidungsverlauf. Prognosen sind Hochrechnungen, keine Zusagen.",
         "tile_budget": "Budget je Haushaltsposition",
-        "tile_budget_caption": "Gebunden gegenüber Gesamt. Das Datum der Ausschöpfung wird mit der Ausgabenrate der letzten 90 Tage hochgerechnet und setzt mindestens 2 genehmigte Aufträge in diesem Zeitraum voraus.",
+        "tile_budget_caption": "Gebunden gegenüber Gesamt. Die Prognose bis 31.12. wird mit der Ausgabenrate der letzten 90 Tage hochgerechnet und setzt mindestens 2 genehmigte Aufträge in diesem Zeitraum voraus.",
         "ins_col_line": "Haushaltsposition",
         "ins_col_department": "Fachbereich",
         "ins_col_committed": "Gebunden",
         "ins_col_total": "Gesamt",
         "ins_col_used": "Ausgeschöpft",
-        "ins_col_runout": "Voraussichtlich ausgeschöpft",
+        "ins_col_runout": "Prognose bis 31.12.",
         "ins_not_enough": "zu wenig Daten",
         "ins_exhausted": "ausgeschöpft",
+        "ins_runs_out": "Ausgeschöpft ~{date}",
+        "ins_year_end": "≈ {share} ausgeschöpft bis 31.12.",
+        "ins_col_orders": "Bestellungen",
+        "ins_concentration_skipped": "Zu wenig Daten für eine Konzentrationsprüfung: {lines} (nötig sind mindestens {spend} genehmigte Ausgaben und {orders} Bestellungen je Position).",
+        "chart_line_select": "Haushaltsposition im Diagramm",
+        "chart_actual": "Ist",
+        "chart_projection": "Prognose",
+        "chart_total": "Budget {amount}",
+        "chart_date": "Datum",
+        "chart_series": "Verlauf",
+        "chart_cumulative": "Gebunden (kumuliert)",
+        "chart_share_total": "Anteil am Budget",
+        "chart_burnup_caption": "Durchgezogen: im laufenden Haushaltsjahr gebunden. Gestrichelt: Prognose bis 31.12. mit der Rate der letzten 90 Tage. Gepunktet: Gesamtbudget der Position.",
+        "chart_no_projection": "Zu wenige Bestellungen in den letzten 90 Tagen für eine Prognose.",
+        "chart_supplier": "Lieferant",
+        "chart_spend": "Genehmigte Ausgaben",
+        "chart_orders": "Bestellungen",
+        "chart_lines": "Haushaltspositionen",
+        "chart_flag": "über 40 %",
+        "chart_suppliers_caption": "Genehmigte Ausgaben je Lieferant über alle Haushaltspositionen. Orange: auffällige Konzentration auf einer Position (siehe unten).",
         "tile_suppliers": "Lieferantenanteil an den Ausgaben",
-        "tile_suppliers_caption": "Genehmigte Ausgaben je Haushaltsposition. Ein Lieferant mit mehr als 40 % einer Position wird markiert.",
+        "tile_suppliers_caption": "Genehmigte Ausgaben je Haushaltsposition. Ein Lieferant mit mehr als 40 % einer Position wird markiert, wenn die Position mindestens 10.000 € genehmigte Ausgaben und 3 Bestellungen hat und mehrere Lieferanten oder mindestens 3 Bestellungen dieses Lieferanten.",
         "ins_col_supplier": "Lieferant",
         "ins_col_spend": "Ausgaben",
         "ins_col_share": "Anteil",
@@ -424,6 +476,7 @@ TRANSLATIONS = {
         "no_budget_data": "Keine Budgetdaten verfügbar.",
         "reset_btn": "Demo-Daten zurücksetzen",
         "manual_btn": "📘 Benutzerhandbuch",
+        "menu_toggle": "Menü ein-/ausblenden",
         "how_it_works": "So funktioniert der Assistent",
         "how_it_works_caption": "Vom Antrag bis zur Management-Übersicht: Der Agent bereitet vor, Menschen entscheiden.",
         "reset_success": "Datenbank und Antragswarteschlange auf den Demo-Stand zurückgesetzt.",
@@ -836,6 +889,40 @@ st.markdown(
             font-size: 0.75rem;
             color: #64748B;
             margin-top: 0.25rem;
+        }
+
+        /* Sidebar toggle: a hamburger icon (Material "menu") in both states, at the same spot,
+           always visible. Streamlit's own buttons and toggle behaviour are kept; only the icon
+           (a Material Symbols ligature) is swapped. */
+        [data-testid="stSidebarCollapseButton"] {
+            visibility: visible !important;
+            opacity: 1 !important;
+            order: -1;  /* left end of the sidebar header, where the expand button sits when collapsed */
+            position: relative;
+            left: -11px;  /* same x as the expand button (19px), so the icon does not jump; no layout effect */
+        }
+        [data-testid="stSidebarCollapseButton"] button,
+        button[data-testid="stExpandSidebarButton"] {
+            border-radius: 0.5rem;
+            transition: background-color 0.15s ease;
+        }
+        [data-testid="stSidebarCollapseButton"] button:hover,
+        button[data-testid="stExpandSidebarButton"]:hover {
+            background-color: rgba(30, 58, 138, 0.08);
+        }
+        [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"],
+        [data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] {
+            font-size: 0 !important;
+        }
+        [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"]::after,
+        [data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"]::after {
+            content: "menu";
+            font-family: "Material Symbols Rounded";
+            font-size: 24px;
+            line-height: 1;
+            color: #1E3A8A;
+            display: inline-block;
+            vertical-align: middle;
         }
     </style>
     """,
@@ -1940,6 +2027,103 @@ def render_bid_history() -> None:
                 render_history_rows(run)
 
 
+# Chart colours: the app navy lightened to the validated chart step, amber for flags, ink for text
+CHART_NAVY = "#2B4DA6"
+CHART_AMBER = "#D97706"
+CHART_INK = "#0F172A"
+CHART_MUTED = "#64748B"
+CHART_GRID = "#E2E8F0"
+MONTHS_DE = "['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']"
+
+
+def chart_eur_axis() -> alt.Axis:
+    """EUR axis labels in the UI language (12.000 € / €12,000)."""
+    expr = ("replace(format(datum.value, ',.0f'), /,/g, '.') + ' €'" if st.session_state["lang"] == "DE"
+            else "'€' + format(datum.value, ',.0f')")
+    return alt.Axis(labelExpr=expr, labelColor=CHART_MUTED, gridColor=CHART_GRID, domain=False, ticks=False, tickCount=5,
+                    title=None)
+
+
+def burnup_chart(data: Dict[str, Any], fmt_date, fmt_share) -> alt.LayerChart:
+    """Cumulative committed spend of one budget line in the current budget year: actual (solid),
+    projection to 31 Dec (dashed) and the line's budget total (dotted rule with a label)."""
+    total = data["total"]
+    rows = []
+    for kind, points in (("actual", data["actual"]), ("projection", data["projection"])):
+        for point in points:
+            rows.append({
+                "date": pd.Timestamp(point["date"]), "cumulative": point["cumulative"], "kind": t(f"chart_{kind}"),
+                "line": data["category"], "date_label": fmt_date(point["date"]),
+                "amount_label": fmt_eur(point["cumulative"], 0),
+                "share_label": fmt_share(point["cumulative"] / total) if total > 0 else "–",
+            })
+    frame = pd.DataFrame(rows)
+    year = date.today().year
+    month_axis = (alt.Axis(labelExpr=f"{MONTHS_DE}[month(datum.value)]", tickCount="month") if st.session_state["lang"] == "DE"
+                  else alt.Axis(format="%b", tickCount="month"))
+    month_axis.labelColor, month_axis.grid, month_axis.title, month_axis.domainColor = CHART_MUTED, False, None, CHART_GRID
+    x = alt.X("date:T", scale=alt.Scale(domain=[f"{year}-01-01T00:00:00", f"{year}-12-31T23:59:59"]), axis=month_axis)
+    top = max([total] + [r["cumulative"] for r in rows]) * 1.12
+    y = alt.Y("cumulative:Q", scale=alt.Scale(domain=[0, top]), axis=chart_eur_axis())
+    tooltip = [
+        alt.Tooltip("date_label:N", title=t("chart_date")),
+        alt.Tooltip("line:N", title=t("ins_col_line")),
+        alt.Tooltip("kind:N", title=t("chart_series")),
+        alt.Tooltip("amount_label:N", title=t("chart_cumulative")),
+        alt.Tooltip("share_label:N", title=t("chart_share_total")),
+    ]
+    actual = frame[frame["kind"] == t("chart_actual")]
+    projection = frame[frame["kind"] == t("chart_projection")]
+    layers = [
+        alt.Chart(actual).mark_line(interpolate="step-after", color=CHART_NAVY, strokeWidth=2, tooltip=False).encode(x=x, y=y),
+        alt.Chart(actual).mark_circle(size=64, color=CHART_NAVY, opacity=1).encode(x=x, y=y, tooltip=tooltip),
+    ]
+    if not projection.empty:
+        layers += [
+            alt.Chart(projection).mark_line(color=CHART_NAVY, strokeWidth=2, strokeDash=[6, 4], tooltip=False).encode(x=x, y=y),
+            alt.Chart(projection.tail(1)).mark_circle(size=64, color="#FFFFFF", stroke=CHART_NAVY, strokeWidth=2, opacity=1)
+            .encode(x=x, y=y, tooltip=tooltip),
+        ]
+    budget = pd.DataFrame({"total": [total], "date": [pd.Timestamp(f"{year}-01-01")],
+                           "label": [t("chart_total").format(amount=fmt_eur(total, 0))]})
+    layers += [
+        # Only the data points carry a tooltip (Streamlit would add raw ones to every mark)
+        alt.Chart(budget).mark_rule(color=CHART_MUTED, strokeWidth=1, strokeDash=[2, 3], tooltip=False).encode(y="total:Q"),
+        alt.Chart(budget).mark_text(align="left", baseline="bottom", dx=4, dy=-4, color=CHART_MUTED, fontSize=12, tooltip=False)
+        .encode(x="date:T", y="total:Q", text="label:N"),
+    ]
+    return alt.layer(*layers).properties(height=260).configure_view(strokeWidth=0)
+
+
+def supplier_chart(totals: List[Dict[str, Any]]) -> alt.Chart:
+    """Approved spend per supplier, largest first; flagged suppliers in amber with a text label."""
+    frame = pd.DataFrame([
+        {
+            "supplier": row["supplier"], "spend": row["spend"], "orders": row["orders"],
+            "lines": ", ".join(row["lines"]), "flagged": row["flagged"], "spend_label": fmt_eur(row["spend"], 0),
+            "label": fmt_eur(row["spend"], 0) + (f" · {t('chart_flag')}" if row["flagged"] else ""),
+        }
+        for row in totals
+    ])
+    longest = max(row["spend"] for row in totals)
+    base = alt.Chart(frame).encode(
+        y=alt.Y("supplier:N", sort="-x", title=None,
+                axis=alt.Axis(labelColor=CHART_INK, labelLimit=240, ticks=False, domain=False, labelFontSize=13)),
+        x=alt.X("spend:Q", title=None, axis=None, scale=alt.Scale(domain=[0, longest * 1.45])),
+        tooltip=[
+            alt.Tooltip("supplier:N", title=t("chart_supplier")),
+            alt.Tooltip("spend_label:N", title=t("chart_spend")),
+            alt.Tooltip("orders:Q", title=t("chart_orders")),
+            alt.Tooltip("lines:N", title=t("chart_lines")),
+        ],
+    )
+    bars = base.mark_bar(cornerRadiusEnd=4, height=20).encode(
+        color=alt.condition("datum.flagged", alt.value(CHART_AMBER), alt.value(CHART_NAVY))
+    )
+    labels = base.mark_text(align="left", dx=6, color=CHART_INK, fontSize=12).encode(text="label:N")
+    return (bars + labels).properties(height=max(120, 36 * len(frame))).configure_view(strokeWidth=0)
+
+
 def open_history_dialog(view: str) -> None:
     title = t("history_requests_title") if view == "verify" else t("history_bids_title")
     body = render_request_history if view == "verify" else render_bid_history
@@ -2005,6 +2189,34 @@ with st.sidebar:
             key="manual_btn",
             width="stretch",
         )
+
+    # Localised label for the sidebar toggle (Streamlit's own button; only aria-label/title change).
+    # Placed last in the sidebar, so the empty element cannot shift any content.
+    st.html(
+        f"""
+        <script>
+            (function () {{
+                window.__menuToggleLabel = {json.dumps(t("menu_toggle"))};
+                const apply = function () {{
+                    document.querySelectorAll(
+                        '[data-testid="stSidebarCollapseButton"] button, button[data-testid="stExpandSidebarButton"]'
+                    ).forEach(function (button) {{
+                        if (button.getAttribute("aria-label") !== window.__menuToggleLabel) {{
+                            button.setAttribute("aria-label", window.__menuToggleLabel);
+                            button.setAttribute("title", window.__menuToggleLabel);
+                        }}
+                    }});
+                }};
+                apply();
+                if (!window.__menuToggleObserver) {{
+                    window.__menuToggleObserver = new MutationObserver(apply);
+                    window.__menuToggleObserver.observe(document.body, {{childList: true, subtree: true}});
+                }}
+            }})();
+        </script>
+        """,
+        unsafe_allow_javascript=True,
+    )
 
 
 current_view = st.session_state["current_view"]
@@ -2495,14 +2707,26 @@ elif current_view == "insights":
         pct = f"{share * 100:.0f}"
         return f"{pct} %" if st.session_state.get("lang", "DE") == "DE" else f"{pct}%"
 
-    # --- Tile 1: budget per line with projected run-out date -----------------------------
+    # --- Tile 1: budget per line, burn-up chart and projection to 31 Dec -------------------
     with st.container(border=True):
         st.subheader(t("tile_budget"))
         st.caption(t("tile_budget_caption"))
+        forecast = budget_forecast(lines, approvals, date.today())
+        if lines:
+            # One line at a time: the lines differ by a factor of six, so a shared axis would hide the small ones
+            default = max(range(len(lines)), key=lambda i: forecast[i]["committed"])
+            chosen = st.selectbox(
+                t("chart_line_select"), [line["category"] for line in lines], index=default, key="burnup_line"
+            )
+            data = burnup(next(line for line in lines if line["category"] == chosen), approvals, date.today())
+            st.altair_chart(burnup_chart(data, fmt_date, fmt_share), width="stretch")
+            st.caption(t("chart_burnup_caption") + ("" if data["projection"] else " " + t("chart_no_projection")))
         forecast_rows = []
-        for row in budget_forecast(lines, approvals, date.today()):
-            if row["status"] == "forecast":
-                runout = fmt_date(row["runout_date"])
+        for row in forecast:
+            if row["status"] == "runs_out":
+                runout = t("ins_runs_out").format(date=fmt_date(row["runout_date"]))
+            elif row["status"] == "year_end":
+                runout = t("ins_year_end").format(share=fmt_share(row["year_end_share"]))
             elif row["status"] == "exhausted":
                 runout = t("ins_exhausted")
             else:
@@ -2517,8 +2741,13 @@ elif current_view == "insights":
                     "runout": runout,
                 }
             )
+        soon = [row["runout_soon"] for row in forecast]
+        styled = pd.DataFrame(forecast_rows).style.apply(
+            lambda column: [f"color: {CHART_AMBER}; font-weight: 600" if flag else "" for flag in soon],
+            subset=["runout"],
+        )
         st.dataframe(
-            pd.DataFrame(forecast_rows),
+            styled,
             hide_index=True,
             width="stretch",
             column_config={
@@ -2531,7 +2760,7 @@ elif current_view == "insights":
             },
         )
 
-    # --- Tile 2: supplier share of spend per line ------------------------------------------
+    # --- Tile 2: spend per supplier and concentration per line --------------------------------
     with st.container(border=True):
         st.subheader(t("tile_suppliers"))
         st.caption(t("tile_suppliers_caption"))
@@ -2539,6 +2768,8 @@ elif current_view == "insights":
         if not shares:
             st.caption(t("ins_no_spend"))
         else:
+            st.altair_chart(supplier_chart(supplier_totals(shares)), width="stretch")
+            st.caption(t("chart_suppliers_caption"))
             st.dataframe(
                 pd.DataFrame(
                     [
@@ -2546,6 +2777,7 @@ elif current_view == "insights":
                             "line": r["category"],
                             "supplier": r["supplier"],
                             "spend": fmt_eur(r["spend"], 0),
+                            "orders": r["orders"],
                             "share": round(r["share"] * 100, 1),
                         }
                         for r in shares
@@ -2557,6 +2789,7 @@ elif current_view == "insights":
                     "line": st.column_config.TextColumn(t("ins_col_line")),
                     "supplier": st.column_config.TextColumn(t("ins_col_supplier")),
                     "spend": st.column_config.TextColumn(t("ins_col_spend")),
+                    "orders": st.column_config.NumberColumn(t("ins_col_orders"), format="%d"),
                     "share": st.column_config.ProgressColumn(t("ins_col_share"), format="%.0f%%", min_value=0, max_value=100),
                 },
             )
@@ -2567,6 +2800,12 @@ elif current_view == "insights":
             ]
             if warnings:
                 st.warning("\n".join(f"- {w}" for w in warnings))
+            unchecked = sorted({r["category"] for r in shares if not r["line_checked"]})
+            if unchecked:
+                st.caption(t("ins_concentration_skipped").format(
+                    lines=", ".join(unchecked), spend=fmt_eur(CONCENTRATION_MIN_LINE_SPEND, 0),
+                    orders=CONCENTRATION_MIN_LINE_ORDERS,
+                ))
 
     # --- Tile 3: AI oversight ---------------------------------------------------------------
     with st.container(border=True):

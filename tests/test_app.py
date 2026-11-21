@@ -1,4 +1,5 @@
 import json
+from datetime import date
 import os
 import re
 import sqlite3
@@ -824,8 +825,10 @@ class TestStreamlitApp(IsolatedTestCase):
         self.assertFalse(at.exception)
 
         budget = at.dataframe[0].value.set_index("line")
-        # IT-Ausstattung: 2 orders (7,200 + 9,800) in the last 90 days -> a projected date
-        self.assertNotIn(budget.loc["IT-Ausstattung", "runout"], ("zu wenig Daten", "ausgeschöpft"))
+        # IT-Ausstattung: 2 orders (7,200 + 9,800) in the last 90 days; it lasts the budget year,
+        # so the year-end usage is shown, never a date in a later year
+        self.assertRegex(budget.loc["IT-Ausstattung", "runout"], r"^≈ \d+ % ausgeschöpft bis 31\.12\.$")
+        self.assertFalse(any(str(year) in " ".join(budget["runout"]) for year in range(date.today().year + 1, 2100)))
         # Büromaterial: only one approved order in the window -> no invented date
         self.assertEqual(budget.loc["Büromaterial", "runout"], "zu wenig Daten")
         self.assertEqual(budget.loc["Feuerwehrtechnik", "runout"], "zu wenig Daten")
@@ -833,7 +836,16 @@ class TestStreamlitApp(IsolatedTestCase):
         shares = at.dataframe[1].value
         it = shares[shares["line"] == "IT-Ausstattung"].set_index("supplier")
         self.assertAlmostEqual(it.loc["Cancom SE", "share"], 52.1)  # 18,500 of 35,500
-        self.assertTrue(any("über 40 %" in w.value for w in at.warning))
+        warning = next(w.value for w in at.warning if "über 40 %" in w.value)
+        self.assertIn("IT-Ausstattung: Cancom SE", warning)
+        # Büromaterial (3,450, one order) and Fahrzeuge (7,300) are too small for a concentration check
+        self.assertNotIn("Büromaterial", warning)
+        self.assertNotIn("Fahrzeuge", warning)
+        self.assertTrue(any(c.value.startswith("Zu wenig Daten für eine Konzentrationsprüfung: Büromaterial, Fahrzeuge")
+                            for c in at.caption))
+        # Burn-up chart (default: the line with the most spend) and supplier chart
+        self.assertEqual(at.selectbox(key="burnup_line").value, "IT-Ausstattung")
+        self.assertEqual(len(at.get("vega_lite_chart")), 2)
 
         # 7 of 8 demo decisions agree; VA-2026-H08 is the override
         self.assertEqual(at.metric[0].value, "88 %")
