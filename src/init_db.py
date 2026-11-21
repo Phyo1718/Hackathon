@@ -1,5 +1,8 @@
 import os
 import sqlite3
+from datetime import datetime, timedelta
+
+from src.demo_seed import BUDGET_LINES, HISTORICAL_REQUESTS
 
 DEFAULT_DB_PATH = os.path.join(os.path.dirname(__file__), "../data/mock_data.db")
 
@@ -20,6 +23,7 @@ def init_db():
     cursor.execute("DROP TABLE IF EXISTS Audit_Logs;")
     cursor.execute("DROP TABLE IF EXISTS Suppliers;")
     cursor.execute("DROP TABLE IF EXISTS Budgets;")
+    cursor.execute("DROP TABLE IF EXISTS Employees;")
 
     # Create Budgets table
     cursor.execute("""
@@ -27,7 +31,11 @@ def init_db():
         Category TEXT PRIMARY KEY,
         Konto TEXT NOT NULL,
         Total_Budget REAL NOT NULL,
-        Remaining_Budget REAL NOT NULL
+        Remaining_Budget REAL NOT NULL,
+        Produkt TEXT NOT NULL,
+        Auszahlungskonto TEXT NOT NULL,
+        Account_Type TEXT NOT NULL,
+        Department TEXT NOT NULL
     );
     """)
 
@@ -54,21 +62,43 @@ def init_db():
     );
     """)
 
-    # Realistic municipal budget positions (Haushaltsstellen / Konten)
-    budgets = [
-        ("IT-Ausstattung", "542900", 150000.0, 150000.0),
-        ("Büromaterial", "543100", 25000.0, 25000.0),
-        ("Fahrzeuge", "544000", 80000.0, 80000.0),
+    # Create Employees table (staff per department, used for the accessibility check)
+    cursor.execute("""
+    CREATE TABLE Employees (
+        Department TEXT PRIMARY KEY,
+        Total_Employees INTEGER NOT NULL,
+        Employees_With_Special_Needs INTEGER NOT NULL
+    );
+    """)
+
+    # Departments are keyed by the budget position they procure from
+    employees = [
+        ("IT-Ausstattung", 20, 2),
+        ("Büromaterial", 10, 0),
+        ("Fahrzeuge", 15, 0),
     ]
     cursor.executemany(
-        "INSERT INTO Budgets (Category, Konto, Total_Budget, Remaining_Budget) VALUES (?, ?, ?, ?);",
-        budgets,
+        "INSERT INTO Employees (Department, Total_Employees, Employees_With_Special_Needs) VALUES (?, ?, ?);",
+        employees,
+    )
+
+    # Municipal budget positions (Haushaltsstellen / Konten), see src/demo_seed.py
+    cursor.executemany(
+        """INSERT INTO Budgets (Category, Konto, Total_Budget, Remaining_Budget, Produkt, Auszahlungskonto,
+                               Account_Type, Department)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?);""",
+        [
+            (b["category"], b["konto"], b["total"], b["total"], b["produkt"], b["auszahlungskonto"],
+             b["account_type"], b["department"])
+            for b in BUDGET_LINES
+        ],
     )
 
     # Approved suppliers and one deliberately blocked supplier for the demo
     suppliers = [
         ("Bechtle GmbH", 1, "IT-Ausstattung"),
         ("Dell Technologies", 1, "IT-Ausstattung"),
+        ("Cancom SE", 1, "IT-Ausstattung"),
         ("Stadtwerke Hildesheim", 1, "Fahrzeuge"),
         ("OfficeDepot Deutschland", 1, "Büromaterial"),
         ("TechCorp", 0, "IT-Ausstattung"),
@@ -78,54 +108,26 @@ def init_db():
         suppliers,
     )
 
-    # Pre-existing audit history so the agent can identify contract extensions
-    audit_history = [
-        (
-            "2026-09-12T09:15:00",
-            "Beschaffung von 20 Arbeitsplatzrechnern (Dell Latitude) für die Stadtverwaltung.",
-            "Dell Technologies",
-            18500.0,
-            "IT-Ausstattung",
-            "APPROVED",
-            "Geprüft: Lieferant zugelassen, Budget ausreichend. Freigabe erteilt.",
-        ),
-        (
-            "2026-09-28T13:20:00",
-            "Nachbestellung von 12 Monitoren und Dockingstationen für das Rathaus.",
-            "Bechtle GmbH",
-            7200.0,
-            "IT-Ausstattung",
-            "APPROVED",
-            "Geprüft: Lieferant zugelassen, Budget ausreichend. Freigabe erteilt.",
-        ),
-        (
-            "2026-10-05T14:20:00",
-            "Beschaffung von Büromaterial und Verbrauchsmaterial für die Fachbereiche.",
-            "OfficeDepot Deutschland",
-            3450.0,
-            "Büromaterial",
-            "APPROVED",
-            "Geprüft: Lieferant zugelassen, Budget ausreichend. Freigabe erteilt.",
-        ),
-        (
-            "2026-10-19T10:05:00",
-            "Wartung und Instandhaltung von Dienstfahrzeugen des Bauhofs.",
-            "Stadtwerke Hildesheim",
-            6400.0,
-            "Fahrzeuge",
-            "APPROVED",
-            "Geprüft: Lieferant zugelassen, Budget ausreichend. Freigabe erteilt.",
-        ),
-        (
-            "2026-10-28T13:40:00",
-            "Beschaffung von Servernetzwerkkomponenten für das Rechenzentrum.",
-            "TechCorp",
-            38000.0,
-            "IT-Ausstattung",
-            "REJECTED",
-            "Ablehnung: Lieferant ist nicht im zugelassenen Lieferantenverzeichnis registriert.",
-        ),
-    ]
+    # Demo history of decided requests (relative dates), also used to detect contract extensions
+    now = datetime.now().replace(microsecond=0)
+    audit_history = []
+    for entry in HISTORICAL_REQUESTS:
+        reasoning = (
+            "Geprüft: Lieferant zugelassen, Budget ausreichend. Freigabe erteilt."
+            if entry["decision"] == "APPROVED"
+            else "Ablehnung: " + (entry.get("agent_reason") or (entry.get("note") or {}).get("DE", ""))
+        )
+        audit_history.append(
+            (
+                (now - timedelta(days=entry["days_ago"])).isoformat(),
+                entry["text"]["DE"],
+                entry["supplier"],
+                entry["amount"],
+                entry["category"],
+                entry["decision"],
+                reasoning,
+            )
+        )
     cursor.executemany("""
         INSERT INTO Audit_Logs (Timestamp, Request_Text, Supplier, Amount, Category, Decision, Reasoning)
         VALUES (?, ?, ?, ?, ?, ?, ?);
