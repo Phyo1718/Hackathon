@@ -52,6 +52,7 @@ from src.agent import (  # noqa: E402
     verify_extracted_request,
 )
 from src.bid_parser import BidExtractionError, parse_bid_pdf
+from src.checklist import STATUS_ICONS, verification_view
 from src.bid_scoring import explain, score_bid
 from src.letters import (
     build_letters,
@@ -297,9 +298,6 @@ TRANSLATIONS = {
         # Dialog
         "dialog_title": "Request {ref}",
         "dialog_received": "Received {received} · Source: {source}",
-        "status_APPROVED": "Agent recommendation: Approve. The request meets the municipal budget and supplier regulations. The caseworker decides.",
-        "status_REQUIRES_REVIEW": "Agent recommendation: Review required. The amount exceeds the remaining budget by no more than 5%. The caseworker decides.",
-        "status_REJECTED": "Agent recommendation: Reject. The request does not meet the municipal procurement rules. The caseworker decides; approving requires a justification.",
         "fact_supplier": "Supplier",
         "fact_amount": "Requested amount",
         "fact_position": "Budget position",
@@ -307,9 +305,50 @@ TRANSLATIONS = {
         "fact_form": "Official form",
         "fact_staff": "Department staff",
         "staff_value": "{total} employees, {special} with special needs",
-        "accessibility_warning": "Accessibility warning: {special} of {total} employees in {department} have special needs. Ensure procured items (like desks/chairs) are ergonomic and accessible. This warning is printed in the Sonstige Hinweise section of the Anmeldebogen.",
         "form_lud": "Anmeldebogen LuD (new award)",
         "form_extension": "Anmeldebogen Auftragserweiterung (contract extension)",
+        "banner_APPROVED": "Agent recommendation: Approve – {reason} The caseworker decides.",
+        "banner_REQUIRES_REVIEW": "Agent recommendation: Review required – {reason} The caseworker decides.",
+        "banner_REJECTED": "Agent recommendation: Reject – {reason} The caseworker decides; approving requires a justification.",
+        "reason_approved": "Supplier is approved and the budget covers the amount.",
+        "reason_borderline": "The amount exceeds the remaining budget by {short} (within the 5 % tolerance).",
+        "reason_supplier_unknown": "Supplier {supplier} is not in the supplier register.",
+        "reason_supplier_not_approved": "Supplier {supplier} is not approved.",
+        "reason_budget_unknown": "Budget line {category} was not found.",
+        "reason_budget_exceeded": "The amount exceeds the remaining budget by {short} (more than 5 %).",
+        "check_supplier": "Supplier",
+        "check_budget": "Budget",
+        "check_form": "Form",
+        "check_accessibility": "Accessibility",
+        "chk_supplier_ok": "{supplier} · approved",
+        "chk_supplier_not_approved": "{supplier} · not approved",
+        "chk_supplier_unknown": "{supplier} · not in the supplier register",
+        "chk_budget_ok": "{amount} requested · {left} left on {line} → {after} after",
+        "chk_budget_borderline": "{amount} requested · {left} left on {line} → {short} short (within 5 %)",
+        "chk_budget_short": "{amount} requested · {left} left on {line} → {short} short",
+        "chk_budget_unknown": "budget line {category} not found",
+        "chk_form_lud": "Anmeldebogen LuD (first contract with this supplier)",
+        "chk_form_extension": "Anmeldebogen Auftragserweiterung (previous contract on {date})",
+        "chk_access_needs": "{special} of {total} staff have special needs → {hint}",
+        "chk_access_none": "no staff with special needs ({total} staff)",
+        "chk_access_unknown": "no staff data for {department}",
+        "hint_it": "e.g. screen reader support, adjustable display/keyboard",
+        "hint_furniture": "e.g. ergonomic, height-adjustable",
+        "hint_general": "check that the items are accessible",
+        "details_header": "Details (extracted data and full reasoning)",
+        "details_extracted": "Extracted data",
+        "details_steps": "Full reasoning",
+        "detail_extraction": "**Extraction:** supplier **{supplier}**, amount **{amount}**, budget line **{category}** (Konto {konto}).",
+        "detail_history_new": "**Procurement history:** Checked the procurement history: no previous contract with {supplier} → new award (Anmeldebogen LuD).",
+        "detail_history_extension": "**Procurement history:** Checked the procurement history: {count} previous approved contract(s) with {supplier}, the latest on {date} → contract extension (Anmeldebogen Auftragserweiterung).",
+        "detail_supplier_ok": "**Supplier:** {supplier} is in the supplier register and approved.",
+        "detail_supplier_not_approved": "**Supplier:** {supplier} is in the supplier register but not approved.",
+        "detail_supplier_unknown": "**Supplier:** {supplier} is not in the supplier register.",
+        "detail_budget": "**Budget:** {category} (Konto {konto}) had {left} left when the request was checked; requested: {amount}.",
+        "detail_budget_unknown": "**Budget:** budget line {category} was not found.",
+        "detail_access_needs": "**Accessibility:** {special} of {total} employees in {department} have special needs. The procured items should be ergonomic and accessible; this note is printed in the Anmeldebogen (Sonstige Hinweise).",
+        "detail_access_none": "**Accessibility:** no employees with special needs in {department} ({total} employees).",
+        "detail_access_unknown": "**Accessibility:** no staff data for {department}.",
         "request_text_header": "Full request text",
         "reasoning_header": "Step-by-step verification",
         "no_reasoning": "No reasoning provided.",
@@ -594,9 +633,6 @@ TRANSLATIONS = {
         # Dialog
         "dialog_title": "Antrag {ref}",
         "dialog_received": "Eingang {received} · Quelle: {source}",
-        "status_APPROVED": "Empfehlung des Agenten: Genehmigen. Der Antrag erfüllt die haushalts- und vergaberechtlichen Vorgaben. Die Entscheidung trifft die Sachbearbeitung.",
-        "status_REQUIRES_REVIEW": "Empfehlung des Agenten: Prüfung erforderlich. Der Betrag überschreitet das Restbudget um höchstens 5 %. Die Entscheidung trifft die Sachbearbeitung.",
-        "status_REJECTED": "Empfehlung des Agenten: Ablehnen. Der Antrag erfüllt die kommunalen Vergabevorschriften nicht. Die Entscheidung trifft die Sachbearbeitung; eine Genehmigung erfordert eine Begründung.",
         "fact_supplier": "Lieferant",
         "fact_amount": "Beantragter Betrag",
         "fact_position": "Haushaltsposition",
@@ -604,9 +640,50 @@ TRANSLATIONS = {
         "fact_form": "Amtliches Formular",
         "fact_staff": "Beschäftigte im Fachbereich",
         "staff_value": "{total} Beschäftigte, davon {special} mit besonderen Bedürfnissen",
-        "accessibility_warning": "Warnung Barrierefreiheit: {special} von {total} Beschäftigten im Fachbereich {department} haben besondere Bedürfnisse. Es ist sicherzustellen, dass die beschafften Gegenstände (z. B. Tische und Stühle) ergonomisch und barrierefrei sind. Die Warnung wird im Abschnitt Sonstige Hinweise des Anmeldebogens ausgegeben.",
         "form_lud": "Anmeldebogen LuD (Neuvergabe)",
         "form_extension": "Anmeldebogen Auftragserweiterung",
+        "banner_APPROVED": "Empfehlung des Agenten: Genehmigen – {reason} Die Entscheidung trifft die Sachbearbeitung.",
+        "banner_REQUIRES_REVIEW": "Empfehlung des Agenten: Prüfung erforderlich – {reason} Die Entscheidung trifft die Sachbearbeitung.",
+        "banner_REJECTED": "Empfehlung des Agenten: Ablehnen – {reason} Die Entscheidung trifft die Sachbearbeitung; eine Genehmigung erfordert eine Begründung.",
+        "reason_approved": "Der Lieferant ist zugelassen und das Budget deckt den Betrag.",
+        "reason_borderline": "Der Betrag überschreitet das Restbudget um {short} (innerhalb der 5-%-Toleranz).",
+        "reason_supplier_unknown": "Lieferant {supplier} ist nicht im Lieferantenverzeichnis.",
+        "reason_supplier_not_approved": "Lieferant {supplier} ist nicht zugelassen.",
+        "reason_budget_unknown": "Haushaltsposition {category} wurde nicht gefunden.",
+        "reason_budget_exceeded": "Der Betrag überschreitet das Restbudget um {short} (mehr als 5 %).",
+        "check_supplier": "Lieferant",
+        "check_budget": "Budget",
+        "check_form": "Formular",
+        "check_accessibility": "Barrierefreiheit",
+        "chk_supplier_ok": "{supplier} · zugelassen",
+        "chk_supplier_not_approved": "{supplier} · nicht zugelassen",
+        "chk_supplier_unknown": "{supplier} · nicht im Lieferantenverzeichnis",
+        "chk_budget_ok": "{amount} beantragt · {left} frei auf {line} → danach {after}",
+        "chk_budget_borderline": "{amount} beantragt · {left} frei auf {line} → {short} zu wenig (innerhalb 5 %)",
+        "chk_budget_short": "{amount} beantragt · {left} frei auf {line} → {short} zu wenig",
+        "chk_budget_unknown": "Haushaltsposition {category} nicht gefunden",
+        "chk_form_lud": "Anmeldebogen LuD (erster Auftrag an diesen Lieferanten)",
+        "chk_form_extension": "Anmeldebogen Auftragserweiterung (früherer Auftrag vom {date})",
+        "chk_access_needs": "{special} von {total} Beschäftigten mit besonderen Bedürfnissen → {hint}",
+        "chk_access_none": "keine Beschäftigten mit besonderen Bedürfnissen ({total} Beschäftigte)",
+        "chk_access_unknown": "keine Beschäftigtendaten für {department}",
+        "hint_it": "z. B. Screenreader-Unterstützung, verstellbarer Bildschirm/Tastatur",
+        "hint_furniture": "z. B. ergonomisch, höhenverstellbar",
+        "hint_general": "Barrierefreiheit der Gegenstände prüfen",
+        "details_header": "Details (ausgelesene Daten und vollständige Begründung)",
+        "details_extracted": "Ausgelesene Daten",
+        "details_steps": "Vollständige Begründung",
+        "detail_extraction": "**Auslesen:** Lieferant **{supplier}**, Betrag **{amount}**, Haushaltsposition **{category}** (Konto {konto}).",
+        "detail_history_new": "**Vergabeverlauf:** Vergabeverlauf geprüft: kein früherer Auftrag an {supplier} → Neuvergabe (Anmeldebogen LuD).",
+        "detail_history_extension": "**Vergabeverlauf:** Vergabeverlauf geprüft: {count} frühere(r) genehmigte(r) Auftrag/Aufträge an {supplier}, zuletzt am {date} → Auftragserweiterung (Anmeldebogen Auftragserweiterung).",
+        "detail_supplier_ok": "**Lieferant:** {supplier} ist im Lieferantenverzeichnis und zugelassen.",
+        "detail_supplier_not_approved": "**Lieferant:** {supplier} ist im Lieferantenverzeichnis, aber nicht zugelassen.",
+        "detail_supplier_unknown": "**Lieferant:** {supplier} ist nicht im Lieferantenverzeichnis.",
+        "detail_budget": "**Budget:** {category} (Konto {konto}) hatte bei der Prüfung {left} frei; beantragt: {amount}.",
+        "detail_budget_unknown": "**Budget:** Haushaltsposition {category} wurde nicht gefunden.",
+        "detail_access_needs": "**Barrierefreiheit:** {special} von {total} Beschäftigten im Fachbereich {department} haben besondere Bedürfnisse. Die beschafften Gegenstände sollen ergonomisch und barrierefrei sein; der Hinweis steht im Anmeldebogen (Sonstige Hinweise).",
+        "detail_access_none": "**Barrierefreiheit:** keine Beschäftigten mit besonderen Bedürfnissen im Fachbereich {department} ({total} Beschäftigte).",
+        "detail_access_unknown": "**Barrierefreiheit:** keine Beschäftigtendaten für {department}.",
         "request_text_header": "Vollständiger Antragstext",
         "reasoning_header": "Schritt-für-Schritt-Prüfprotokoll",
         "no_reasoning": "Keine Begründung vorhanden.",
@@ -1607,6 +1684,89 @@ def render_caseworker_decision(item: Dict[str, Any], transfer: Optional[Dict[str
         st.rerun()
 
 
+BANNER_ICONS = {"APPROVED": "✅", "REQUIRES_REVIEW": "⚠️", "REJECTED": "❌"}
+CHECK_COLOURS = {"pass": "green", "warn": "orange", "fail": "red", "info": "blue"}
+
+
+def fmt_day(value: Any) -> str:
+    """A date (or ISO timestamp) as 14.06.2026 (DE) or 2026-06-14 (EN)."""
+    try:
+        day = datetime.fromisoformat(str(value)).date() if not isinstance(value, date) else value
+    except ValueError:
+        return str(value or "-")
+    return day.strftime("%d.%m.%Y" if st.session_state.get("lang", "DE") == "DE" else "%Y-%m-%d")
+
+
+def verification_text(code: str, params: Dict[str, Any]) -> str:
+    """DE/EN text for a checklist/detail code; money and dates in the UI language's format."""
+    values = dict(params)
+    for key in ("amount", "left", "after", "short"):
+        if key in values:
+            values[key] = fmt_eur(values[key], 0)
+    if "date" in values:
+        values["date"] = fmt_day(values["date"])
+    if "hint" in values:
+        values["hint"] = t(f"hint_{values['hint']}")
+    return t(code).format(**values)
+
+
+def render_verification(item: Dict[str, Any], eval_data: Dict[str, Any], decision: str,
+                        live_budget: Dict[str, Any], is_extension: bool) -> None:
+    """The agent's verification: the recommendation first, one line per check, then the
+    extracted data and the full reasoning in an expander. Falls back to the stored reasoning
+    text if the evaluation has no structured check results."""
+    try:
+        view = verification_view(eval_data, live_budget)
+    except (KeyError, TypeError, ValueError):
+        view = None
+
+    reason = verification_text(f"reason_{view['reason']['code']}", view["reason"]["params"]) if view else ""
+    banner = t(f"banner_{decision}").format(reason=reason)
+    if not reason:
+        banner = banner.replace(" –  ", ". ")
+    show = {"APPROVED": st.success, "REQUIRES_REVIEW": st.warning}.get(decision, st.error)
+    show(banner, icon=BANNER_ICONS.get(decision, "❌"))
+
+    if view is None:
+        st.markdown(f"**{t('reasoning_header')}**")
+        with st.container(border=True):
+            st.markdown(eval_data.get("reasoning") or t("no_reasoning"))
+    else:
+        with st.container(border=True):
+            st.markdown("  \n".join(
+                f":{CHECK_COLOURS[c['status']]}[**{STATUS_ICONS[c['status']]}**] **{t('check_' + c['key'])}** – "
+                f"{verification_text('chk_' + c['code'], c['params'])}"
+                for c in view["checks"]
+            ))
+
+    st.markdown(f"**{t('request_text_header')}**")
+    with st.container(border=True):
+        st.text(localized(item["text"]))
+
+    if view is not None:
+        accessibility = eval_data.get("accessibility_check") or {}
+        category = eval_data.get("category", "")
+        konto = eval_data.get("konto") or live_budget.get("konto") or "-"
+        facts = [
+            (t("fact_supplier"), eval_data.get("supplier_name", "-")),
+            (t("fact_amount"), fmt_eur(float(eval_data.get("amount") or 0.0))),
+            (t("fact_position"), f"{category} · Konto {konto}"),
+            (t("fact_available"), fmt_eur(live_budget.get("remaining_budget")) if not live_budget.get("error") else "-"),
+            (t("fact_form"), t("form_extension") if is_extension else t("form_lud")),
+            (t("fact_staff"), t("staff_value").format(total=accessibility.get("total_employees", 0),
+                                                      special=accessibility.get("employees_with_special_needs", 0))
+             if accessibility.get("found") else "-"),
+        ]
+        with st.expander(t("details_header")):
+            st.markdown(f"**{t('details_extracted')}**")
+            st.markdown("\n".join(f"- {label}: **{value}**" for label, value in facts))
+            st.markdown(f"**{t('details_steps')}**")
+            st.markdown("\n".join(
+                f"{number}. {verification_text(step['code'], step['params'])}"
+                for number, step in enumerate(view["details"], start=1)
+            ))
+
+
 def render_request_dialog(ref: str) -> None:
     """Body of the review popup for a single queued request."""
     item = get_request(ref)
@@ -1615,66 +1775,15 @@ def render_request_dialog(ref: str) -> None:
 
     eval_data = item["evaluation"]
     decision = normalise_decision(eval_data.get("decision"))
-    reasoning = eval_data.get("reasoning", "")
     amount = float(eval_data.get("amount", 0.0) or 0.0)
     category = eval_data.get("category", "")
     is_extension = eval_data.get("procurement_type") == "Auftragserweiterung"
 
     st.caption(t("dialog_received").format(received=item["received"], source=item["source"]))
 
-    if decision == "APPROVED":
-        st.success(t("status_APPROVED"))
-    elif decision == "REQUIRES_REVIEW":
-        st.warning(t("status_REQUIRES_REVIEW"))
-    else:
-        st.error(t("status_REJECTED"))
-
-    accessibility = eval_data.get("accessibility_check") or {}
-    if accessibility.get("warning"):
-        st.warning(
-            t("accessibility_warning").format(
-                special=accessibility.get("employees_with_special_needs", 0),
-                total=accessibility.get("total_employees", 0),
-                department=accessibility.get("department", category),
-            )
-        )
-
-    # Key facts, with the budget re-read live since it may have changed after queueing
-    live_budget = check_budget(amount, category) if category else {}
-    konto = eval_data.get("konto") or live_budget.get("konto") or "-"
-    facts = [
-        (t("fact_supplier"), eval_data.get("supplier_name", "-")),
-        (t("fact_amount"), fmt_eur(amount)),
-        (t("fact_position"), f"{category} · Konto {konto}"),
-        (t("fact_available"), fmt_eur(live_budget.get("remaining_budget")) if not live_budget.get("error") else "-"),
-        (t("fact_form"), t("form_extension") if is_extension else t("form_lud")),
-        (
-            t("fact_staff"),
-            t("staff_value").format(
-                total=accessibility.get("total_employees", 0),
-                special=accessibility.get("employees_with_special_needs", 0),
-            )
-            if accessibility.get("found")
-            else "-",
-        ),
-    ]
-    with st.container(border=True):
-        fact_cols = st.columns(2)
-        for i, (label, value) in enumerate(facts):
-            with fact_cols[i % 2]:
-                st.caption(label)
-                st.markdown(f"**{value}**")
-
-    st.markdown(f"**{t('request_text_header')}**")
-    with st.container(border=True):
-        st.text(localized(item["text"]))
-
-    st.markdown(f"**{t('reasoning_header')}**")
-    with st.container(border=True):
-        if reasoning:
-            st.markdown(reasoning)
-        else:
-            st.caption(t("no_reasoning"))
+    # Budget figures are re-read live, since they may have changed after queueing
+    live_budget = check_budget(amount, category) if category else {"error": "no category"}
+    render_verification(item, eval_data, decision, live_budget, is_extension)
 
     if item["status"] == "PENDING":
         transfer = render_issues_and_transfer(item)

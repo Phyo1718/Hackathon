@@ -328,10 +328,10 @@ class Walk:
         self.open_queue_row(0)
         dialog = "'[role=dialog]'"
         self.shot("03_request_checks", [f"M.q('h2', 'VA-2026-0001', {dialog})",
-                                        f"M.boxes({dialog})[0]"], [
+                                        f"M.up(M.q('summary', 'Details', {dialog}), '[data-testid=stExpander]')"], [
             f"M.qa('[data-testid=stAlert]', {dialog})[0]",
-            f"M.qa('[data-testid=stAlert]', {dialog})[1]",
             f"M.boxes({dialog})[0]",
+            f"M.up(M.q('summary', 'Details', {dialog}), '[data-testid=stExpander]')",
         ], clamp='[role=dialog]')
         self.scroll_to(f"M.q('p, strong, h3, h4', {json.dumps(ui['decision'])}, {dialog})")
         self.shot("04_request_decision", [f"M.q('p, strong, h3, h4', {json.dumps(ui['decision'])}, {dialog})",

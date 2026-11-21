@@ -274,7 +274,42 @@ class TestStreamlitApp(IsolatedTestCase):
         self.assertNotEqual(at.dataframe[0].value["accessibility"][SEEDED], "-")
 
         at = self.open_request(at)
-        self.assertTrue(any("2" in w.value and "20" in w.value for w in at.warning))
+        # An information line in the checklist (not a separate warning banner)
+        checklist = next(m.value for m in at.markdown if "**Barrierefreiheit**" in m.value)
+        self.assertIn(":blue[**ℹ**] **Barrierefreiheit** – 2 von 20 Beschäftigten mit besonderen Bedürfnissen", checklist)
+        self.assertIn("z. B. Screenreader-Unterstützung", checklist)
+
+    def test_request_dialog_shows_verdict_checklist_and_details(self):
+        at = self.start_app()
+        at.session_state["active_request"] = SEEDED_REFS[2]  # VA-2026-0003: borderline budget, transfer
+        at.run()
+        self.assertFalse(at.exception)
+        banner = next(w.value for w in at.warning if w.value.startswith("Empfehlung des Agenten"))
+        self.assertEqual(banner, "Empfehlung des Agenten: Prüfung erforderlich – Der Betrag überschreitet das Restbudget "
+                                 "um 3.300 € (innerhalb der 5-%-Toleranz). Die Entscheidung trifft die Sachbearbeitung.")
+        checklist = next(m.value for m in at.markdown if "**Lieferant**" in m.value)
+        self.assertEqual(len(checklist.split("  \n")), 4)
+        self.assertIn(":orange[**⚠**] **Budget** – 76.000 € beantragt · 72.700 € frei auf Fahrzeuge → 3.300 € zu wenig", checklist)
+        details = next(e for e in at.expander if e.label.startswith("Details"))
+        text = " ".join(m.value for m in details.markdown)
+        self.assertIn("Vergabeverlauf geprüft", text)
+        self.assertNotIn("Audit_Logs", text)
+        self.assertNotIn("Empfehlung", text)  # the recommendation is in the banner, not in the list
+        self.assertTrue(any("Budgetverschiebung möglich" in m.value for m in at.markdown))
+
+        at.segmented_control(key="lang_toggle").set_value("EN").run()
+        self.assertTrue(any(e.value.startswith("Agent recommendation: Review required – ") for e in at.warning))
+        checklist = next(m.value for m in at.markdown if "**Supplier**" in m.value)
+        self.assertIn("€76,000 requested · €72,700 left on Fahrzeuge → €3,300 short", checklist)
+
+    def test_request_dialog_falls_back_to_reasoning_text(self):
+        evaluation = self.make_eval("Dell Technologies", 14500.0, "IT-Ausstattung", "APPROVED")
+        del evaluation["supplier_check"]  # no structured checks: show the stored text instead
+        at = self.submit_requests(evaluation)
+        at = self.open_request(at)
+        self.assertFalse(at.exception)
+        self.assertTrue(any(s.value.startswith("Empfehlung des Agenten: Genehmigen. ") for s in at.success))
+        self.assertTrue(any(m.value == "Agent decision: APPROVED" for m in at.markdown))
 
     def test_bid_upload_prefills_agent_scores_and_needs_committee_confirmation(self):
         at = self.start_app()

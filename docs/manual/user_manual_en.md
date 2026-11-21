@@ -52,12 +52,16 @@ The table (1) lists all requests that still need a decision, with the agent's as
 
 ## 3.2 Open a request and read the checks
 
-![Request VA-2026-0001: agent recommendation (1), accessibility warning (2), key facts (3).](img/03_request_checks_en.png)
+![Request VA-2026-0001: agent recommendation (1), checks (2), details (3).](img/03_request_checks_en.png)
 
-- **Agent recommendation (1):** Approve, Reject or Review required, with the reason. The agent checks whether the supplier is approved and whether the budget line has enough funds. If the amount is at most 5 % above the available budget, the recommendation is "Review required".
-- **Accessibility (2):** if the department has staff with special needs, a warning appears. It is also printed in the Anmeldebogen under "Sonstige Hinweise".
-- **Key facts (3):** supplier, amount, budget line and account, available budget, the matching form (new award or contract extension) and the number of staff.
-- Below these are the full request text and the agent's step-by-step check log.
+- **Agent recommendation (1):** at the top, in colour, with a one-sentence reason: ✅ Approve, ⚠️ Review required or ❌ Reject. If the amount is at most 5 % above the available budget, the recommendation is "Review required".
+- **Checks (2):** one line per check: ✓ passed, ⚠ needs attention, ✗ failed, ℹ information only.
+  - **Supplier:** approved or not.
+  - **Budget:** requested, available, and what is left afterwards.
+  - **Form:** new award or contract extension.
+  - **Accessibility:** staff with special needs and a matching hint. The hint is also printed in the Anmeldebogen under "Sonstige Hinweise".
+- **Details (3):** the extracted data (supplier, amount, budget line and account, form, staff) and the agent's full reasoning, step by step.
+- Above them is the full request text.
 
 ## 3.3 Decide: approve or reject
 

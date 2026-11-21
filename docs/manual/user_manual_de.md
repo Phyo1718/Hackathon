@@ -52,12 +52,16 @@ Die Tabelle (1) zeigt alle Anträge, die noch entschieden werden müssen, mit de
 
 ## 3.2 Antrag öffnen und die Prüfungen lesen
 
-![Antrag VA-2026-0001: Empfehlung des Agenten (1), Warnung Barrierefreiheit (2), Eckdaten (3).](img/03_request_checks_de.png)
+![Antrag VA-2026-0001: Empfehlung des Agenten (1), Prüfungen (2), Details (3).](img/03_request_checks_de.png)
 
-- **Empfehlung des Agenten (1):** Genehmigen, Ablehnen oder Prüfung erforderlich, jeweils mit Grund. Der Agent prüft, ob der Lieferant zugelassen ist und ob die Haushaltsposition genug Mittel hat. Liegt der Betrag höchstens 5 % über dem verfügbaren Budget, lautet die Empfehlung „Prüfung erforderlich“.
-- **Barrierefreiheit (2):** Hat der Fachbereich Beschäftigte mit besonderen Bedürfnissen, erscheint eine Warnung. Sie wird auch im Anmeldebogen unter „Sonstige Hinweise“ ausgegeben.
-- **Eckdaten (3):** Lieferant, Betrag, Haushaltsposition und Konto, verfügbares Budget, das passende Formular (Neuvergabe oder Auftragserweiterung) und die Zahl der Beschäftigten.
-- Darunter stehen der vollständige Antragstext und das Schritt-für-Schritt-Prüfprotokoll des Agenten.
+- **Empfehlung des Agenten (1):** oben, farbig, mit einem Satz Begründung: ✅ Genehmigen, ⚠️ Prüfung erforderlich oder ❌ Ablehnen. Liegt der Betrag höchstens 5 % über dem verfügbaren Budget, lautet die Empfehlung „Prüfung erforderlich“.
+- **Prüfungen (2):** eine Zeile je Prüfung: ✓ bestanden, ⚠ Aufmerksamkeit nötig, ✗ nicht bestanden, ℹ nur zur Information.
+  - **Lieferant:** zugelassen oder nicht.
+  - **Budget:** beantragt, frei und danach verfügbar.
+  - **Formular:** Neuvergabe oder Auftragserweiterung.
+  - **Barrierefreiheit:** Beschäftigte mit besonderen Bedürfnissen und ein passender Hinweis. Der Hinweis steht auch im Anmeldebogen unter „Sonstige Hinweise“.
+- **Details (3):** ausgelesene Daten (Lieferant, Betrag, Haushaltsposition mit Konto, Formular, Beschäftigte) und die vollständige Begründung des Agenten Schritt für Schritt.
+- Darüber steht der vollständige Antragstext.
 
 ## 3.3 Entscheiden: Genehmigen oder Ablehnen
 
