@@ -693,21 +693,70 @@ section[role="dialog"] > button[aria-label="Close"]:focus-visible { outline: 3px
   color: var(--hz-blue-ink); display: inline-block; vertical-align: middle;
 }
 
-/* ---------- Help assistant (ported from main): round button fixed at the bottom right ----------- */
+/* ---------- Help assistant: round button fixed at the bottom right, themed panel ---------------- */
 .st-key-help_chat { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 999; width: auto !important; }
 .st-key-help_chat button {
-  width: 3.5rem; height: 3.5rem; min-height: 3.5rem; border-radius: 50%; padding: 0;
-  background-color: var(--hz-blue-ink); border: none; color: #FFFFFF; font-size: 1.5rem;
-  box-shadow: 0 6px 18px rgba(7, 106, 137, .32);
+  position: relative; width: 3.5rem; height: 3.5rem; min-height: 3.5rem; border-radius: 50%; padding: 0;
+  background-color: var(--hz-blue-ink); border: none; color: #FFFFFF;
+  box-shadow: 0 8px 20px rgba(7, 106, 137, .32);
+}
+.st-key-help_chat button::after {  /* decorative orange dot */
+  content: ""; position: absolute; top: 2px; right: 2px; width: 13px; height: 13px; border-radius: 50%;
+  background: var(--hz-orange); box-shadow: 0 0 0 3px var(--hz-paper);
 }
 .st-key-help_chat button:hover { background-color: #055A74; color: #FFFFFF; }
 .st-key-help_chat button[aria-expanded="true"], .st-key-help_chat button:focus, .st-key-help_chat button:active {
   background-color: var(--hz-blue-ink); color: #FFFFFF;
 }
-.st-key-help_chat button p { font-size: 1.6rem; line-height: 1; }
+.st-key-help_chat button:focus-visible { outline: 3px solid var(--hz-blue); outline-offset: 3px; }
+/* The emoji label is replaced visually by a Material chat glyph (the label text itself is unchanged) */
+.st-key-help_chat button p { font-size: 0 !important; line-height: 1; }
+.st-key-help_chat button p::before {
+  content: "chat"; font-family: "Material Symbols Rounded"; font-feature-settings: "liga"; font-size: 1.75rem;
+  text-transform: none; letter-spacing: normal; color: #FFFFFF; display: inline-block;
+}
 .st-key-help_chat button [data-testid="stIconMaterial"] { display: none; }  /* no dropdown chevron */
-[data-testid="stPopoverBody"]:has(.st-key-help_chat_panel) { width: 360px; max-width: calc(100vw - 2rem); }
-[data-testid="stMainBlockContainer"] { padding-bottom: 7rem; }  /* the help button never covers the last element */
+[data-testid="stPopoverBody"]:has(.st-key-help_chat_panel) {
+  width: 360px; max-width: calc(100vw - 2rem); border: 1px solid var(--hz-line) !important; border-radius: 16px !important;
+  background: var(--hz-surface) !important; box-shadow: var(--hz-shadow-lift) !important;
+}
+.st-key-help_chat_panel > [data-testid="stElementContainer"]:first-child strong {
+  display: flex; align-items: center; gap: .55rem;
+  font-family: var(--hz-font-display); font-style: italic; font-weight: 700; text-transform: uppercase;
+  font-size: 1.3rem; color: var(--hz-text); line-height: 1.1;
+}
+.st-key-help_chat_panel > [data-testid="stElementContainer"]:first-child strong::before {
+  content: ""; flex: 0 0 14px; height: 14px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--hz-blue) 0 55%, transparent 56%), var(--hz-orange);
+}
+[class*="st-key-help_chat_starter_"] button {
+  border-radius: 999px !important; border: 1px solid #B9D6E0 !important; background: var(--hz-blue-tint) !important;
+  color: var(--hz-blue-ink) !important; justify-content: flex-start; text-align: left; min-height: 2.3rem;
+}
+[class*="st-key-help_chat_starter_"] button p { font-weight: 500; white-space: normal; text-align: left; }
+[class*="st-key-help_chat_starter_"] button:hover { border-color: var(--hz-blue-ink) !important; background: #D8EDF4 !important; }
+.st-key-help_chat_panel [data-testid="stChatMessage"] { border-radius: 14px; padding: .6rem .75rem; background: var(--hz-paper); }
+.st-key-help_chat_panel [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) { background: var(--hz-blue-tint); }
+.st-key-help_chat_clear button { color: var(--hz-blue-ink) !important; padding-left: 0; }
+.st-key-help_chat_clear button p {
+  font-family: var(--hz-font-label); text-transform: uppercase; letter-spacing: .07em; font-weight: 600;
+}
+.st-key-help_chat_clear button p::after { content: " \\2192"; color: var(--hz-orange); display: inline-block; }
+.st-key-help_chat_panel [data-testid="stChatInput"] { border-radius: 14px; }
+.st-key-help_chat_panel [data-testid="stChatInput"]:focus-within { box-shadow: 0 0 0 3px rgba(11, 153, 196, .22); border-color: var(--hz-blue-ink); }
+/* The help button never covers content: bottom padding, and a right gutter on wide screens */
+[data-testid="stMainBlockContainer"] { padding-bottom: 7.5rem !important; }
+@media (min-width: 641px) {
+  [data-testid="stMain"]:has(.st-key-help_chat) [data-testid="stMainBlockContainer"] { padding-right: 6.75rem !important; }
+}
+/* Phones: the help button sits in the (empty) top header bar, left of the menu, above all content */
+@media (max-width: 640px) {
+  .st-key-help_chat { top: .5rem; bottom: auto; right: 3.4rem; z-index: 1000001; }
+  .st-key-help_chat button { width: 2.75rem; height: 2.75rem; min-height: 2.75rem; box-shadow: 0 4px 12px rgba(7, 106, 137, .28); }
+  .st-key-help_chat button::after { width: 10px; height: 10px; top: 0; right: 0; }
+  .st-key-help_chat button p::before { font-size: 1.4rem; }
+  [data-testid="stMainBlockContainer"] { padding-bottom: 3rem !important; }
+}
 
 /* ---------- Startup gate ---------------------------------------------------------------------- */
 .st-key-hzgate { max-width: 760px; margin: 4vh auto 0; position: relative; }
@@ -779,19 +828,19 @@ _MOTION_CSS = """
   [data-testid="stExpander"] summary > span > span:first-child [data-testid="stIconMaterial"]::after { transition: transform 260ms var(--hz-ease); }
 
   /* 7. Budget meters fill on first appearance */
-  .budget-meter-fill { animation: hz-grow 700ms var(--hz-ease) 150ms both; }
+  .budget-meter-fill { animation: hz-grow 700ms var(--hz-ease) 150ms backwards; }
 
   /* 8. Status messages pop in; success icon draws in */
-  [data-testid="stAlert"] { animation: hz-pop 380ms var(--hz-ease) both; }
+  [data-testid="stAlert"] { animation: hz-pop 380ms var(--hz-ease) backwards; }
   [data-testid="stAlertContainer"]:has([data-testid="stAlertContentSuccess"]) :is([data-testid="stIconMaterial"], [data-testid="stAlertDynamicIcon"]) {
-    animation: hz-check 600ms var(--hz-ease) 120ms both;
+    animation: hz-check 600ms var(--hz-ease) 120ms backwards;
   }
-  .hz-illus, .hz-chip { animation: hz-pop 460ms var(--hz-ease) both; }
-  .hz-illus-badge { animation: hz-check 640ms var(--hz-ease) 200ms both; }
+  .hz-illus, .hz-chip { animation: hz-pop 460ms var(--hz-ease) backwards; }
+  .hz-illus-badge { animation: hz-check 640ms var(--hz-ease) 200ms backwards; }
 
   /* 9. Dialogs */
-  [data-testid="stDialog"] { animation: hz-fade 240ms ease both; }
-  [data-testid="stDialog"] > div { animation: hz-panel 340ms var(--hz-ease) both; }
+  [data-testid="stDialog"] { animation: hz-fade 240ms ease backwards; }
+  [data-testid="stDialog"] > div { animation: hz-panel 340ms var(--hz-ease) backwards; }
 
   /* 10. Segmented controls */
   [data-testid="stButtonGroup"] button[data-variant="segmented_control"] {
@@ -805,10 +854,10 @@ _MOTION_CSS = """
   [data-testid="stFileUploaderDropzone"]:not([aria-disabled="true"]):hover { transform: scale(1.01); }
 
   /* 12. Metrics */
-  [data-testid="stMetricValue"] { animation: hz-rise 520ms var(--hz-ease) 120ms both; }
+  [data-testid="stMetricValue"] { animation: hz-rise 520ms var(--hz-ease) 120ms backwards; }
 
   /* 13. Toasts */
-  [data-testid="stToast"] { animation: hz-toast 420ms var(--hz-ease) both; }
+  [data-testid="stToast"] { animation: hz-toast 420ms var(--hz-ease) backwards; }
 
   /* Inputs */
   :is([data-baseweb="textarea"], [data-baseweb="input"], [data-baseweb="select"] > div) { transition: box-shadow 200ms ease, border-color 200ms ease; }
@@ -819,7 +868,7 @@ _MOTION_CSS = """
   .hz-hero-art .hz-c3 { animation: hz-float-c 7s ease-in-out infinite alternate; }
 
   /* Startup screen */
-  .st-key-hzgate { animation: hz-rise 560ms var(--hz-ease) both; }
+  .st-key-hzgate { animation: hz-rise 560ms var(--hz-ease) backwards; }
 }
 """
 
@@ -833,7 +882,7 @@ def _entrance_css(views) -> str:
     for view in views:
         rules.append(f"@keyframes hz-enter-{view} {{ from {{ opacity: 0; transform: translateY(12px); }} to {{ opacity: 1; transform: none; }} }}")
         scope = f'[data-testid="stMain"]:has(.st-key-hzhero_{view}) [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]'
-        rules.append(f"{scope} > :nth-child(-n+7) {{ animation: hz-enter-{view} 520ms var(--hz-ease) both; }}")
+        rules.append(f"{scope} > :nth-child(-n+7) {{ animation: hz-enter-{view} 520ms var(--hz-ease) backwards; }}")
         for index in range(2, 8):
             rules.append(f"{scope} > :nth-child({index}) {{ animation-delay: {(index - 1) * 50}ms; }}")
     return "@media (prefers-reduced-motion: no-preference) {\n" + "\n".join(rules) + "\n}\n"
