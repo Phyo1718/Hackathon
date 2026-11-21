@@ -11,6 +11,7 @@ from fpdf import FPDF
 from streamlit.testing.v1 import AppTest
 
 from helpers import PROJECT_ROOT, IsolatedTestCase
+from src.help_chat import HelpUnavailable
 from src.agent import ExtractionError, check_accessibility, check_budget, check_supplier
 
 APP_PATH = str(PROJECT_ROOT / "app.py")
@@ -741,6 +742,32 @@ class TestStreamlitApp(IsolatedTestCase):
         at.segmented_control(key="lang_toggle").set_value("EN").run()
         self.assertFalse(at.exception)
         self.assertEqual(at.sidebar.get("download_button")[0].proto.label, "📘 User manual")
+
+    def test_help_chat_answers_and_handles_failures(self):
+        with patch("src.help_chat.ask", return_value="Schreiben Sie einen Vermerk.") as fake_ask:
+            at = self.start_app()
+            self.assertEqual(len(at.get("popover")), 1)
+            at.chat_input(key="help_chat_input").set_value("Wie entscheide ich gegen den Agenten?").run()
+            self.assertFalse(at.exception)
+            question, history, lang, page = fake_ask.call_args.args
+            self.assertEqual((question, history, lang, page), ("Wie entscheide ich gegen den Agenten?", [], "DE", "Antragsprüfung"))
+            self.assertEqual([m["content"] for m in at.session_state["help_chat_messages"]],
+                             ["Wie entscheide ich gegen den Agenten?", "Schreiben Sie einen Vermerk."])
+        with patch("src.help_chat.ask", side_effect=HelpUnavailable("timeout")):
+            at.chat_input(key="help_chat_input").set_value("Noch eine Frage").run()
+            self.assertFalse(at.exception)
+            last = at.session_state["help_chat_messages"][-1]
+            self.assertTrue(last["error"])
+            self.assertEqual(last["content"], "Der Hilfe-Assistent ist gerade nicht erreichbar. Siehe Benutzerhandbuch (Seitenleiste).")
+        at.button(key="help_chat_clear").click().run()
+        self.assertEqual(at.session_state["help_chat_messages"], [])
+
+    def test_help_chat_disabled(self):
+        with patch.dict(os.environ, {"ENABLE_CHAT": "false"}):
+            at = self.start_app()
+            self.assertFalse(at.exception)
+            self.assertEqual(len(at.get("popover")), 0)
+            self.assertNotIn("help_chat_messages", at.session_state)
 
     def test_bid_dropdown_lists_only_approved_requests_without_evaluation(self):
         at = self.start_app()
