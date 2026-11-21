@@ -14,6 +14,7 @@ Hooks used by the CSS:
 All motion is wrapped in @media (prefers-reduced-motion: no-preference) and animates on mount only,
 so Streamlit reruns (for example typing in a text area) do not replay it.
 """
+import base64
 import html
 from typing import Dict
 
@@ -133,15 +134,25 @@ def illustration(icon: str, tone: str = "blue", size: str = "md", paper: bool = 
     )
 
 
-def brand_mark() -> str:
-    """Small decorative circle cluster for the sidebar header."""
-    return (
-        '<div class="hz-brand-mark" aria-hidden="true">'
-        f'<span style="background:{TOKENS["blue"]}"></span>'
-        f'<span style="background:{TOKENS["orange"]}"></span>'
-        f'<span style="background:{TOKENS["sage"]}"></span>'
-        "</div>"
-    )
+# Original app logo: a rounded badge with a document-and-checkmark glyph (procurement verification),
+# with two small accent circles touching the badge edge. Also saved as static/img/logo.svg (tab icon).
+LOGO_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">'
+    '<rect x="4" y="6" width="36" height="36" rx="11" fill="#076A89"/>'
+    '<path d="M15 13h11l6 6v16a2 2 0 0 1-2 2H15a2 2 0 0 1-2-2V15a2 2 0 0 1 2-2z" fill="#FFFFFF"/>'
+    '<path d="M26 13v6h6" fill="none" stroke="#076A89" stroke-width="1.6" stroke-linejoin="round"/>'
+    '<path d="M17.5 27.5l3.6 3.6 6.6-7.4" fill="none" stroke="#076A89" stroke-width="2.8" '
+    'stroke-linecap="round" stroke-linejoin="round"/>'
+    '<circle cx="40.5" cy="8.5" r="5.5" fill="#CC6815"/>'
+    '<circle cx="7" cy="40.5" r="4.5" fill="#8EBE9E"/>'
+    "</svg>"
+)
+
+
+def logo_html() -> str:
+    """The logo mark as an <img> (st.html removes inline <svg>, a data-URI image is kept)."""
+    data = base64.b64encode(LOGO_SVG.encode("utf-8")).decode("ascii")
+    return f'<div class="hz-logo" aria-hidden="true"><img src="data:image/svg+xml;base64,{data}" alt="" width="44" height="44"></div>'
 
 
 def step(number: int, tone: str = "orange") -> str:
@@ -623,11 +634,14 @@ section[role="dialog"] > button[aria-label="Close"]:focus-visible { outline: 3px
 /* ---------- Sidebar --------------------------------------------------------------------------- */
 [data-testid="stSidebar"] { background-color: var(--hz-surface); border-right: 1px solid var(--hz-line); }
 [data-testid="stSidebarUserContent"] { padding-top: .25rem; }
-.hz-brand-mark { position: relative; isolation: isolate; width: 64px; height: 40px; margin: 0 0 .1rem -2px; }
-.hz-brand-mark span { position: absolute; border-radius: 50%; mix-blend-mode: multiply; opacity: .85; }
-.hz-brand-mark span:nth-child(1) { left: 4px; top: 6px; width: 28px; height: 28px; }
-.hz-brand-mark span:nth-child(2) { left: 22px; top: 10px; width: 24px; height: 24px; }
-.hz-brand-mark span:nth-child(3) { left: 37px; top: 7px; width: 20px; height: 20px; }
+.st-key-hzbrand { display: grid !important; grid-template-columns: 44px minmax(0, 1fr); column-gap: .7rem; row-gap: .45rem; align-items: center; }
+.st-key-hzbrand > * { width: auto !important; min-width: 0; margin: 0 !important; }
+.st-key-hzbrand [data-testid="stMarkdownContainer"], .st-key-hzbrand [data-testid="stMarkdownContainer"] p { margin: 0 !important; }
+.st-key-hzbrand > :has(.gov-meta) { grid-column: 1 / -1; grid-row: 1; }
+.st-key-hzbrand > :has(.hz-logo) { grid-column: 1; grid-row: 2; }
+.st-key-hzbrand > :last-child { grid-column: 2; grid-row: 2; }
+.hz-logo { width: 44px; height: 44px; }
+.hz-logo img { display: block; width: 44px; height: 44px; }
 .st-key-hzbrand .gov-meta { line-height: 1.3; align-items: flex-start; }
 .st-key-hzbrand [data-testid="stMarkdownContainer"] p strong {
   font-family: var(--hz-font-display); font-style: italic; font-weight: 700; text-transform: uppercase;
@@ -886,6 +900,20 @@ _MOTION_CSS = """
   .hz-hero-art .hz-c1 { animation: hz-float-a 8s ease-in-out infinite alternate; }
   .hz-hero-art .hz-c2 { animation: hz-float-b 9.5s ease-in-out infinite alternate; }
   .hz-hero-art .hz-c3 { animation: hz-float-c 7s ease-in-out infinite alternate; }
+
+  /* Help assistant */
+  .st-key-help_chat button { transition: transform 200ms var(--hz-ease), box-shadow 220ms var(--hz-ease), background-color 180ms ease; }
+  .st-key-help_chat button:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(7, 106, 137, .38); }
+  .st-key-help_chat button:active { transform: scale(.94); }
+  [data-testid="stPopoverBody"]:has(.st-key-help_chat_panel) { animation: hz-panel 320ms var(--hz-ease) backwards; transform-origin: bottom right; }
+  [class*="st-key-help_chat_starter_"] button { transition: background-color 180ms ease, border-color 180ms ease, transform 180ms var(--hz-ease); }
+  [class*="st-key-help_chat_starter_"] button:hover { transform: translateY(-1px); }
+  .st-key-help_chat_clear button p::after { transition: transform 260ms var(--hz-ease); }
+  .st-key-help_chat_clear button:hover p::after { transform: translateX(5px); }
+
+  /* Logo */
+  .hz-logo img { transition: transform 260ms var(--hz-ease); }
+  .hz-logo:hover img { transform: scale(1.04); }
 
   /* Startup screen */
   .st-key-hzgate { animation: hz-rise 560ms var(--hz-ease) backwards; }

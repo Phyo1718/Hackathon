@@ -851,6 +851,7 @@ def get_budgets_df() -> pd.DataFrame:
 
 st.set_page_config(
     page_title="Stadt Hildesheim - Procurement Agent",
+    page_icon=str(Path(__file__).parent / "static" / "img" / "logo.svg"),
     layout="wide",
 )
 
@@ -2132,7 +2133,7 @@ def open_history_dialog(view: str) -> None:
 with st.sidebar:
     # Brand block: decorative circles, agency kicker and app name (the language is already applied above)
     with st.container(key="hzbrand"):
-        st.html(ui.brand_mark())
+        st.html(ui.logo_html())
         st.markdown(f'<div class="gov-meta">{t("agency")}</div>', unsafe_allow_html=True)
         st.markdown(f"**{t('app_name')}**")
 
