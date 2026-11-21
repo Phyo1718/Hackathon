@@ -1,0 +1,35 @@
+# Keep the build context small and free of secrets and local data.
+# (The Dockerfile copies only named files; this list is the second safety net.)
+
+# Secrets: never send them to the Docker daemon (also in subfolders)
+**/.env
+.env
+.env.*
+!.env.example
+
+# Local environments, caches, VCS
+.venv/
+venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.git/
+.gitignore
+**/.DS_Store
+**/*.log
+
+# Local data: database and history are created in the container's volume
+data/
+**/*.db
+**/*.sqlite
+**/history.json
+
+# Development only: tests, manual build tooling, screenshots
+tests/
+scripts/
+docs/manual/img/
+**/node_modules/
+
+# Docker / Kubernetes files themselves
+docker-compose.yml
+k8s/

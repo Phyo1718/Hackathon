@@ -1,0 +1,67 @@
+# EXAMPLE – not tested on a cluster.
+# One replica only: the app keeps its data in SQLite and history.json on a ReadWriteOnce volume.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: procurement-assistant-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: procurement-assistant
+  labels:
+    app: procurement-assistant
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # never two pods on the same SQLite file
+  selector:
+    matchLabels:
+      app: procurement-assistant
+  template:
+    metadata:
+      labels:
+        app: procurement-assistant
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001  # makes the volume writable for the app user
+      containers:
+        - name: app
+          image: procurement-assistant:latest  # push to your registry and use its full name/tag here
+          ports:
+            - containerPort: 8501
+          envFrom:
+            - secretRef:
+                name: procurement-assistant-secrets
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          readinessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: procurement-assistant-data

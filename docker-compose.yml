@@ -1,0 +1,19 @@
+# Public Procurement Assistant – local run with Docker Compose.
+#   cp .env.example .env   # then set GEMINI_API_KEY
+#   docker compose up --build
+#   open http://localhost:8501
+services:
+  procurement-assistant:
+    build: .
+    image: procurement-assistant:latest
+    ports:
+      - "8501:8501"
+    # The API key is read at runtime from .env; it is not part of the image
+    env_file: .env
+    volumes:
+      # SQLite database and history.json (decisions, evaluations, letters) survive restarts
+      - procurement-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  procurement-data:
