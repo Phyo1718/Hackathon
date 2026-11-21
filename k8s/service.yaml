@@ -1,0 +1,14 @@
+# EXAMPLE – not tested on a cluster.
+# Cluster-internal service; expose it with an Ingress or `kubectl port-forward svc/procurement-assistant 8501:8501`.
+# Streamlit uses WebSockets: an Ingress in front of it must allow them (and sticky sessions if scaled).
+apiVersion: v1
+kind: Service
+metadata:
+  name: procurement-assistant
+spec:
+  selector:
+    app: procurement-assistant
+  ports:
+    - name: http
+      port: 8501
+      targetPort: 8501
